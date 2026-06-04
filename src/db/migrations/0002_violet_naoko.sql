@@ -1,0 +1,1 @@
+ALTER TABLE `favorites` ADD `created_at` integer DEFAULT 0 NOT NULL;

@@ -1,22 +1,14 @@
+import journal from './meta/_journal.json';
+import m0000 from './0000_chubby_nocturne.sql';
+import m0001 from './0001_next_strong_guy.sql';
+import m0002 from './0002_violet_naoko.sql';
+
 const migrations = {
-  journal: {
-    entries: [
-      {
-        idx: 0,
-        when: 1780595883752,
-        tag: '0000_chubby_nocturne',
-        breakpoints: true,
-      },
-    ],
-  },
+  journal,
   migrations: {
-    m0000: `CREATE TABLE \`posts\` (
-\t\`id\` integer PRIMARY KEY NOT NULL,
-\t\`user_id\` integer NOT NULL,
-\t\`title\` text NOT NULL,
-\t\`body\` text NOT NULL,
-\t\`image_url\` text NOT NULL
-);`,
+    m0000,
+    m0001,
+    m0002,
   },
 };
 

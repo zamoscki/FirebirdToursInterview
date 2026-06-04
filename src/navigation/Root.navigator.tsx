@@ -10,7 +10,8 @@ export default function RootNavigator() {
     <Stack.Navigator
       initialRouteName="Posts"
       screenOptions={{
-        headerLargeTitleEnabled: true
+        headerLargeTitleEnabled: true,
+        headerBackButtonDisplayMode: 'minimal',
       }}
     >
       <Stack.Screen name="Posts" component={PostsScreen} />

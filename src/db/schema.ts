@@ -10,3 +10,10 @@ export const posts = sqliteTable('posts', {
 
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
+
+export const favorites = sqliteTable('favorites', {
+  postId: integer('post_id').primaryKey(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export type Favorite = typeof favorites.$inferSelect;
