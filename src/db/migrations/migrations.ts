@@ -2,6 +2,8 @@ import journal from './meta/_journal.json';
 import m0000 from './0000_chubby_nocturne.sql';
 import m0001 from './0001_next_strong_guy.sql';
 import m0002 from './0002_violet_naoko.sql';
+import m0003 from './0003_tan_dreadnoughts.sql';
+import m0004 from './0004_polite_the_hood.sql';
 
 const migrations = {
   journal,
@@ -9,6 +11,8 @@ const migrations = {
     m0000,
     m0001,
     m0002,
+    m0003,
+    m0004,
   },
 };
 

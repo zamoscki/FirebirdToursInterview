@@ -1,0 +1,2677 @@
+ ▐▛███▜▌   Claude Code v2.1.152
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~/Playground/react-native/FirebirdTourInterview
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ I would like to move component logic out of screen component. In screen       
+  component I would like to leave only those things which are belong to         
+  customization of screen, like header navigation buttons, navigation params,   
+  etc. All other logic and components shold move into *.container.tsx file      
+
+  Read 4 files, listed 1 directory (ctrl+o to expand)
+
+⏺ Now I have a clear picture. Two screens to refactor:
+  - Posts.screen.tsx — contains PostRow subcomponent, store hooks, list/sections
+   logic, swipeable state. Only "screen customization" is navigation to Details.
+  - Details.screen.tsx — contains FavoriteHeaderButton (used in headerRight),
+  useLayoutEffect to set header, store hooks, and the body rendering.
+
+  Before drafting the plan, one design decision matters.
+
+⏺ User answered Claude's questions:
+  ⎿  · How should the container talk to React Navigation? → Navigation-agnostic 
+     (Recommended)
+     · Where should subcomponents like `PostRow` and `FavoriteHeaderButton` 
+     live? → Keep colocated (Recommended)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Split screens into *.screen.tsx + *.container.tsx
+
+     Context
+
+     src/screens/Posts.screen.tsx and src/screens/Details.screen.tsx currently
+     mix two concerns:
+
+     1. Screen customization — extracting route params, configuring the
+     navigation header (setOptions, headerRight), and triggering navigation.
+     2. Feature logic and UI — Zustand store wiring, data loading effects, list
+     rendering, swipeable row state, the detail body.
+
+     We want the *.screen.tsx file to hold only what is unique to it being a
+     navigator screen, and move everything else into a sibling *.container.tsx.
+     This makes the containers easy to read, test, and reuse independently of
+     React Navigation.
+
+     Design
+
+     For each screen, two files:
+
+     - Name.screen.tsx — default export consumed by Root.navigator.tsx. Receives
+      React Navigation props. Responsibilities only: read route.params, call
+     navigation.setOptions / useLayoutEffect, build navigation callbacks, render
+      <NameContainer ... />.
+     - Name.container.tsx — named export. Navigation-agnostic: takes plain
+     domain props (ids, callbacks). Holds all store hooks, effects, memoized
+     data, subcomponents, and styles.
+
+     Subcomponents stay colocated (no new components/ folder):
+     - PostRow lives in Posts.container.tsx.
+     - FavoriteHeaderButton lives in Details.screen.tsx (it is rendered inside
+     headerRight, which is a screen-level concern).
+
+     Files to change
+
+     src/screens/Posts.container.tsx (new)
+
+     - Named export PostsContainer.
+     - Props: { onPostPress: (id: number) => void }.
+     - Moves from Posts.screen.tsx:
+       - PostRow / PostRowComponent and the PostRowProps type.
+       - All usePostsStore / useFavoritesStore hooks.
+       - openSwipeableRef, handleSwipeOpen, closeOpenSwipeable.
+       - sections useMemo, useEffect for loadPosts / loadFavorites, renderItem.
+       - Loading / error / SectionList rendering.
+       - All related styles.
+     - The internal handlePostPress is replaced by calling
+     props.onPostPress(id).
+
+     src/screens/Posts.screen.tsx (rewrite)
+
+     - Default export PostsScreen({ navigation }: PostsScreenProps).
+     - Defines handlePostPress = useCallback(id => 
+     navigation.navigate('Details', { postId: id }), [navigation]).
+     - Returns <PostsContainer onPostPress={handlePostPress} />.
+     - No styles, no store imports.
+
+     src/screens/Details.container.tsx (new)
+
+     - Named export DetailsContainer.
+     - Props: { postId: number }.
+     - Moves from Details.screen.tsx:
+       - usePostsStore(s => s.posts.find(p => p.id === postId)).
+       - Not-found view and the ScrollView body.
+       - The body / image / title styles (container, image, title, body,
+     centered).
+     - Does not know about navigation or favorites — FavoriteHeaderButton stays
+     in the screen.
+
+     src/screens/Details.screen.tsx (rewrite)
+
+     - Default export DetailsScreen({ route, navigation }: DetailsScreenProps).
+     - Keeps FavoriteHeaderButton, renderFavoriteHeaderRight, the
+     useLayoutEffect that sets headerRight, and the headerStar / headerStarOn
+     styles (header-only concern).
+     - Returns <DetailsContainer postId={postId} />.
+
+     src/navigation/Root.navigator.tsx
+
+     - No changes. Continues to import default exports from
+     ./screens/Posts.screen and ./screens/Details.screen.
+
+     Conventions followed
+
+     - File naming matches existing *.screen.tsx convention; new *.container.tsx
+      mirrors it (per [[feedback_file_naming]]).
+     - State architecture is preserved — containers call Zustand stores, which
+     call repositories (per [[feedback_state_architecture]]). No component-to-DB
+      calls are introduced.
+     - No new dependencies, no schema or store changes.
+
+     Verification
+
+     1. npm run lint — passes.
+     2. npm test — existing Jest suite passes (only __tests__/App.test.tsx
+     exists today; nothing screen-specific to update).
+     3. npm run ios (or android) and confirm manually:
+       - Posts list loads, Favorites/Other sections render, only one swipeable
+     row open at a time, tapping a row navigates to Details.
+       - Details screen shows the post; star in header toggles favorite state
+     and reflects in the Posts list on back-navigation.
+       - Loading + error states still render (can be checked by temporarily
+     throwing in loadPosts).
+
+⏺ Write(src/screens/Posts.container.tsx)
+  ⎿  Wrote 242 lines to src/screens/Posts.container.tsx
+       1 import { memo, useCallback, useEffect, useMemo, useRef } from 'r
+         eact';
+       2 import {
+       3   ActivityIndicator,
+       4   Image,
+       6   SectionList,
+       7   StyleSheet,
+       8   Text,
+       9   View,
+      10 } from 'react-native';
+     … +244 lines (ctrl+o to expand)
+
+⏺ Write(src/screens/Posts.screen.tsx)
+  ⎿  Added 3 lines, removed 235 lines
+        1 -import { memo, useCallback, useEffect, useMemo, useRef } from 
+          -'react';                                                      
+        2 -import {                                                      
+        3 -  ActivityIndicator,                                          
+        4 -  Image,                                                      
+        5 -  Pressable,                                                  
+        6 -  SectionList,                                                
+        7 -  StyleSheet,                                                 
+        8 -  Text,                                                       
+        9 -  View,                                                       
+       10 -} from 'react-native';                                        
+       11 -import ReanimatedSwipeable from 'react-native-gesture-handler/
+          -ReanimatedSwipeable';                                         
+       12 -import type { SwipeableMethods } from 'react-native-gesture-ha
+          -ndler/ReanimatedSwipeable';                                   
+       13 -import { GestureDetector, useTapGesture } from 'react-native-g
+          -esture-handler';                                              
+       14 -import { runOnJS } from 'react-native-worklets';              
+       15 -import { usePostsStore } from '../stores/posts.store';        
+       16 -import { useFavoritesStore } from '../stores/favorites.store';
+        1 +import { useCallback } from 'react';                          
+        2 +import { PostsContainer } from './Posts.container';           
+        3  import { PostsScreenProps } from '../navigation/types';
+       18 -import type { Post } from '../db/schema';                     
+        4  
+       20 -type PostRowProps = {                                         
+       21 -  item: Post;                                                 
+       22 -  onPress: (id: number) => void;                              
+       23 -  onToggleFavorite: (id: number) => void;                     
+       24 -  onSwipeOpen: (methods: SwipeableMethods) => void;           
+       25 -};                                                            
+       26 -                                                              
+       27 -function PostRowComponent({                                   
+       28 -  item,                                                       
+       29 -  onPress,                                                    
+       30 -  onToggleFavorite,                                           
+       31 -  onSwipeOpen,                                                
+       32 -}: PostRowProps) {                                            
+       33 -  const isFavorite = useFavoritesStore(s => s.favoriteIds.has(
+          -item.id));                                                    
+       34 -  const swipeableRef = useRef<SwipeableMethods>(null);        
+       35 -                                                              
+       36 -  const handlePress = () => onPress(item.id);                 
+       37 -  const handleToggle = () => onToggleFavorite(item.id);       
+       38 -                                                              
+       39 -  const renderRightActions = (                                
+       40 -    _progress: unknown,                                       
+       41 -    _translation: unknown,                                    
+       42 -    swipeableMethods: SwipeableMethods,                       
+       43 -  ) => (                                                      
+       44 -    <Pressable                                                
+       45 -      style={styles.favoriteAction}                           
+       46 -      onPress={() => {                                        
+       47 -        handleToggle();                                       
+       48 -        swipeableMethods.close();                             
+       49 -      }}>                                                     
+       50 -      <Text style={styles.favoriteActionText}>{isFavorite ? '★
+          -' : '☆'}</Text>                                               
+       51 -    </Pressable>                                              
+       52 -  );                                                          
+       53 -                                                              
+       54 -  const tapGesture = useTapGesture({                          
+       55 -    onActivate: () => {                                       
+       56 -      'worklet';                                              
+       57 -      runOnJS(handlePress)();                                 
+       58 -    },                                                        
+       59 -  });                                                         
+       60 -                                                              
+       61 -  return (                                                    
+       62 -    <ReanimatedSwipeable                                      
+       63 -      ref={swipeableRef}                                      
+       64 -      renderRightActions={renderRightActions}                 
+       65 -      onSwipeableWillOpen={() => {                            
+       66 -        if (swipeableRef.current) {                           
+       67 -          onSwipeOpen(swipeableRef.current);                  
+       68 -        }                                                     
+       69 -      }}>                                                     
+       70 -      <GestureDetector gesture={tapGesture}>                  
+       71 -        <View style={styles.row}>                             
+       72 -          <Image source={{ uri: item.imageUrl }} style={styles
+          -.thumbnail} />                                                
+       73 -          <Text style={styles.title}>{item.title}</Text>      
+       74 -          {isFavorite && <Text style={styles.favoriteBadge}>★<
+          -/Text>}                                                       
+       75 -        </View>                                               
+       76 -      </GestureDetector>                                      
+       77 -    </ReanimatedSwipeable>                                    
+       78 -  );                                                          
+       79 -}                                                             
+       80 -                                                              
+       81 -const PostRow = memo(PostRowComponent);                       
+       82 -                                                              
+        5  export default function PostsScreen({ navigation }: PostsScree
+           nProps) {
+       84 -  const posts = usePostsStore(s => s.posts);                  
+       85 -  const isLoading = usePostsStore(s => s.isLoading);          
+       86 -  const error = usePostsStore(s => s.error);                  
+       87 -  const favoriteIds = useFavoritesStore(s => s.favoriteIds);  
+       88 -                                                              
+       89 -  const loadPosts = usePostsStore(s => s.loadPosts);          
+       90 -  const loadFavorites = useFavoritesStore(s => s.loadFavorites
+          -);                                                            
+       91 -  const toggleFavorite = useFavoritesStore(s => s.toggleFavori
+          -te);                                                          
+       92 -                                                              
+       93 -  const openSwipeableRef = useRef<SwipeableMethods | null>(nul
+          -l);                                                           
+       94 -                                                              
+       95 -  const sections = useMemo(() => {                            
+       96 -    const postById = new Map(posts.map(p => [p.id, p]));      
+       97 -    const favoritePosts: Post[] = [];                         
+       98 -    for (const id of favoriteIds) {                           
+       99 -      const post = postById.get(id);                          
+      100 -      if (post) {                                             
+      101 -        favoritePosts.push(post);                             
+      102 -      }                                                       
+      103 -    }                                                         
+      104 -    const otherPosts = posts.filter(p => !favoriteIds.has(p.id
+          -));                                                           
+      105 -    return [                                                  
+      106 -      { title: 'Favorites', data: favoritePosts },            
+      107 -      { title: 'Other', data: otherPosts },                   
+      108 -    ];                                                        
+      109 -  }, [posts, favoriteIds]);                                   
+      110 -                                                              
+      111 -  const handleSwipeOpen = useCallback((methods: SwipeableMetho
+          -ds) => {                                                      
+      112 -    if (openSwipeableRef.current && openSwipeableRef.current !
+          -== methods) {                                                 
+      113 -      openSwipeableRef.current.close();                       
+      114 -    }                                                         
+      115 -    openSwipeableRef.current = methods;                       
+      116 -  }, []);                                                     
+      117 -                                                              
+      118 -  const closeOpenSwipeable = useCallback(() => {              
+      119 -    openSwipeableRef.current?.close();                        
+      120 -    openSwipeableRef.current = null;                          
+      121 -  }, []);                                                     
+      122 -                                                              
+        6    const handlePostPress = useCallback(
+        7      (id: number) => navigation.navigate('Details', { postId: i
+           d }),
+        8      [navigation],
+        9    );
+       10  
+      128 -  useEffect(() => {                                           
+      129 -    loadPosts();                                              
+      130 -    loadFavorites();                                          
+      131 -  }, [loadPosts, loadFavorites]);                             
+      132 -                                                              
+      133 -  const renderItem = useCallback(                             
+      134 -    ({ item }: { item: Post }) => (                           
+      135 -      <PostRow                                                
+      136 -        item={item}                                           
+      137 -        onPress={handlePostPress}                             
+      138 -        onToggleFavorite={toggleFavorite}                     
+      139 -        onSwipeOpen={handleSwipeOpen}                         
+      140 -      />                                                      
+      141 -    ),                                                        
+      142 -    [handlePostPress, toggleFavorite, handleSwipeOpen],       
+      143 -  );                                                          
+      144 -                                                              
+      145 -  if (isLoading) {                                            
+      146 -    return (                                                  
+      147 -      <View style={styles.centered}>                          
+      148 -        <ActivityIndicator size="large" />                    
+      149 -      </View>                                                 
+      150 -    );                                                        
+      151 -  }                                                           
+      152 -                                                              
+      153 -  if (error) {                                                
+      154 -    return (                                                  
+      155 -      <View style={styles.centered}>                          
+      156 -        <Text style={styles.errorText}>{error}</Text>         
+      157 -      </View>                                                 
+      158 -    );                                                        
+      159 -  }                                                           
+      160 -                                                              
+      161 -  return (                                                    
+      162 -    <SectionList                                              
+      163 -      sections={sections}                                     
+      164 -      contentInsetAdjustmentBehavior="automatic"              
+      165 -      keyExtractor={item => String(item.id)}                  
+      166 -      onScrollBeginDrag={closeOpenSwipeable}                  
+      167 -      automaticallyAdjustKeyboardInsets                       
+      168 -      keyboardShouldPersistTaps="handled"                     
+      169 -      stickySectionHeadersEnabled={false}                     
+      170 -      renderItem={renderItem}                                 
+      171 -      renderSectionHeader={({ section }) =>                   
+      172 -        section.data.length === 0 ? null : (                  
+      173 -          <View style={styles.sectionHeader}>                 
+      174 -            <Text style={styles.sectionTitle}>{section.title}<
+          -/Text>                                                        
+      175 -            <Text style={styles.sectionCount}>{section.data.le
+          -ngth}</Text>                                                  
+      176 -          </View>                                             
+      177 -        )                                                     
+      178 -      }                                                       
+      179 -    />                                                        
+      180 -  );                                                          
+       11 +  return <PostsContainer onPostPress={handlePostPress} />;    
+       12  }
+      182 -                                                              
+      183 -const styles = StyleSheet.create({                            
+      184 -  centered: {                                                 
+      185 -    flex: 1,                                                  
+      186 -    alignItems: 'center',                                     
+      187 -    justifyContent: 'center',                                 
+      188 -  },                                                          
+      189 -  errorText: {                                                
+      190 -    color: 'red',                                             
+      191 -    textAlign: 'center',                                      
+      192 -    marginHorizontal: 24,                                     
+      193 -  },                                                          
+      194 -  sectionHeader: {                                            
+      195 -    flexDirection: 'row',                                     
+      196 -    alignItems: 'center',                                     
+      197 -    justifyContent: 'space-between',                          
+      198 -    backgroundColor: '#f2f2f7',                               
+      199 -    paddingHorizontal: 16,                                    
+      200 -    paddingVertical: 6,                                       
+      201 -  },                                                          
+      202 -  sectionTitle: {                                             
+      203 -    fontSize: 13,                                             
+      204 -    fontWeight: '600',                                        
+      205 -    color: '#6b6b70',                                         
+      206 -    textTransform: 'uppercase',                               
+      207 -  },                                                          
+      208 -  sectionCount: {                                             
+      209 -    fontSize: 12,                                             
+      210 -    fontWeight: '600',                                        
+      211 -    color: '#8e8e93',                                         
+      212 -  },                                                          
+      213 -  row: {                                                      
+      214 -    flexDirection: 'row',                                     
+      215 -    alignItems: 'center',                                     
+      216 -    padding: 16,                                              
+      217 -    gap: 12,                                                  
+      218 -    backgroundColor: '#fff',                                  
+      219 -    borderBottomWidth: StyleSheet.hairlineWidth,              
+      220 -    borderBottomColor: '#ccc',                                
+      221 -  },                                                          
+      222 -  thumbnail: {                                                
+      223 -    width: 25,                                                
+      224 -    height: 25,                                               
+      225 -  },                                                          
+      226 -  title: {                                                    
+      227 -    flex: 1,                                                  
+      228 -    fontSize: 16,                                             
+      229 -  },                                                          
+      230 -  favoriteBadge: {                                            
+      231 -    fontSize: 18,                                             
+      232 -    color: '#f5a623',                                         
+      233 -  },                                                          
+      234 -  favoriteAction: {                                           
+      235 -    backgroundColor: '#f5a623',                               
+      236 -    justifyContent: 'center',                                 
+      237 -    alignItems: 'center',                                     
+      238 -    width: 72,                                                
+      239 -  },                                                          
+      240 -  favoriteActionText: {                                       
+      241 -    fontSize: 28,                                             
+      242 -    color: '#fff',                                            
+      243 -  },                                                          
+      244 -});                                                           
+⏺ Write(src/screens/Details.container.tsx)
+  ⎿  Wrote 56 lines to src/screens/Details.container.tsx
+      1 import { Image, ScrollView, StyleSheet, Text, View } from 'react-
+        native';
+      2 import { usePostsStore } from '../stores/posts.store';
+      4 type DetailsContainerProps = {
+      5   postId: number;
+      6 };
+      7 
+      8 export function DetailsContainer({ postId }: DetailsContainerProp
+      9   const post = usePostsStore(s => s.posts.find(p => p.id === post
+        Id));
+     … +49 lines (ctrl+o to expand)
+
+⏺ Write(src/screens/Details.screen.tsx)
+  ⎿  Added 3 lines, removed 46 lines
+      1  import { useLayoutEffect } from 'react';
+      2 -import { Image, ScrollView, StyleSheet, Text, View } from 'react
+        --native';                                                       
+      2 +import { StyleSheet, Text } from 'react-native';                
+      3  import { HeaderButton } from '@react-navigation/elements';
+      4 -import { usePostsStore } from '../stores/posts.store';          
+      4  import { useFavoritesStore } from '../stores/favorites.store';
+      5  import { DetailsScreenProps } from '../navigation/types';
+      6 +import { DetailsContainer } from './Details.container';         
+      7  
+      8  function FavoriteHeaderButton({ postId }: { postId: number }) {
+      9    const isFavorite = useFavoritesStore(s => s.favoriteIds.has(po
+         stId));
+     ...
+      25  
+      26  export default function DetailsScreen({ route, navigation }: De
+          tailsScreenProps) {
+      27    const { postId } = route.params;
+      28 -  const post = usePostsStore(s => s.posts.find(p => p.id === po
+         -stId));                                                        
+      28  
+      29    useLayoutEffect(() => {
+      30      navigation.setOptions({
+     ...
+      32      });
+      33    }, [navigation, postId]);
+      34  
+      36 -  if (!post) {                                                 
+      37 -    return (                                                   
+      38 -      <View style={styles.centered}>                           
+      39 -        <Text>Post not found.</Text>                           
+      40 -      </View>                                                  
+      41 -    );                                                         
+      42 -  }                                                            
+      43 -                                                               
+      44 -  return (                                                     
+      45 -    <ScrollView                                                
+      46 -      contentContainerStyle={styles.container}                 
+      47 -      contentInsetAdjustmentBehavior="automatic">              
+      48 -      <Image source={{ uri: post.imageUrl }} style={styles.imag
+         -e} />                                                          
+      49 -      <Text style={styles.title}>{post.title}</Text>           
+      50 -      <Text style={styles.body}>{post.body}</Text>             
+      51 -    </ScrollView>                                              
+      52 -  );                                                           
+      35 +  return <DetailsContainer postId={postId} />;                 
+      36  }
+      37  
+      38  const styles = StyleSheet.create({
+      56 -  centered: {                                                  
+      57 -    flex: 1,                                                   
+      58 -    alignItems: 'center',                                      
+      59 -    justifyContent: 'center',                                  
+      60 -  },                                                           
+      61 -  container: {                                                 
+      62 -    padding: 16,                                               
+      63 -    margin: 16,                                                
+      64 -    backgroundColor: 'white',                                  
+      65 -    borderRadius: 16                                           
+      66 -                                                               
+      67 -  },                                                           
+      68 -  image: {                                                     
+      69 -    width: 25,                                                 
+      70 -    height: 25,                                                
+      71 -    marginBottom: 12,                                          
+      72 -  },                                                           
+      73 -  title: {                                                     
+      74 -    fontSize: 18,                                              
+      75 -    fontWeight: '600',                                         
+      76 -    marginBottom: 8,                                           
+      77 -  },                                                           
+      78 -  body: {                                                      
+      79 -    fontSize: 15,                                              
+      80 -    lineHeight: 22,                                            
+      81 -  },                                                           
+      39    headerStar: {
+      40      fontSize: 22,
+      41      color: '#888',
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Lint passes cleanly. The Jest failure is pre-existing and unrelated to this
+  refactor — it fails at App.tsx:3 trying to import react-native-gesture-handler
+   (an ESM transform issue), before any screen code is loaded.
+
+⏺ Done. Refactor summary:
+
+  - src/screens/Posts.container.tsx (new) — holds PostRow, store hooks,
+  sections, swipeable refs, list rendering, styles. Takes onPostPress.
+  - src/screens/Posts.screen.tsx — now ~10 lines: builds the navigate callback,
+  renders <PostsContainer />.
+  - src/screens/Details.container.tsx (new) — looks up post by id, renders body
+  or not-found state.
+  - src/screens/Details.screen.tsx — keeps FavoriteHeaderButton and the
+  useLayoutEffect that wires headerRight, renders <DetailsContainer 
+  postId={postId} />.
+  - Root.navigator.tsx untouched.
+
+  npm run lint is clean. npm test has a pre-existing Jest/ESM issue with
+  react-native-gesture-handler in App.tsx (unrelated to this change). Worth
+  running npm run ios to confirm UI behavior end-to-end.
+
+✻ Cooked for 3m 9s
+
+❯ screen files also move into navigation folder, for container files rename     
+  folder to containers                                                          
+
+  Searched for 1 pattern, read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ This is a continuation of the same refactor — folder reorganization. I'll
+  update the existing plan file.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Reorganize screens/containers into separate folders
+
+     Context
+
+     In the previous step we split each screen into a *.screen.tsx and a
+     *.container.tsx sibling under src/screens/. The next step is to physically
+     separate the two roles by folder:
+
+     - *.screen.tsx files move next to the navigator (they are navigation-layer
+     code: they read route params, set header options, wire navigation
+     callbacks).
+     - *.container.tsx files move into a renamed src/containers/ folder (they
+     are the feature/UI layer: store wiring, rendering, styles).
+
+     This makes the import paths reflect the intent — navigator code groups with
+      screens, feature code groups with containers — and removes the
+     now-misleading src/screens/ folder.
+
+     Target layout
+
+     src/
+       navigation/
+         Root.navigator.tsx
+         types.ts
+         Posts.screen.tsx        (moved from src/screens/)
+         Details.screen.tsx      (moved from src/screens/)
+       containers/               (renamed from src/screens/)
+         Posts.container.tsx     (moved from src/screens/)
+         Details.container.tsx   (moved from src/screens/)
+
+     src/screens/ no longer exists after the move.
+
+     Files to change
+
+     Move (preserve git history with git mv)
+
+     - src/screens/Posts.screen.tsx → src/navigation/Posts.screen.tsx
+     - src/screens/Details.screen.tsx → src/navigation/Details.screen.tsx
+     - src/screens/Posts.container.tsx → src/containers/Posts.container.tsx
+     - src/screens/Details.container.tsx → src/containers/Details.container.tsx
+
+     Update imports
+
+     - src/navigation/Posts.screen.tsx
+       - import { PostsContainer } from './Posts.container'; → from 
+     '../containers/Posts.container';
+       - import { PostsScreenProps } from '../navigation/types'; → from 
+     './types';
+     - src/navigation/Details.screen.tsx
+       - import { DetailsContainer } from './Details.container'; → from 
+     '../containers/Details.container';
+       - import { DetailsScreenProps } from '../navigation/types'; → from 
+     './types';
+     - src/navigation/Root.navigator.tsx
+       - from '../screens/Posts.screen' → from './Posts.screen'
+       - from '../screens/Details.screen' → from './Details.screen'
+     - src/containers/Posts.container.tsx
+       - from '../stores/posts.store' → from '../stores/posts.store' (unchanged
+     — depth is the same)
+       - from '../stores/favorites.store' → unchanged
+       - from '../db/schema' → unchanged
+     - src/containers/Details.container.tsx
+       - from '../stores/posts.store' → unchanged
+
+     (Container files happen to keep the same relative depth, so only their
+     *.screen.tsx siblings need updating.)
+
+     No other consumers
+
+     A repo-wide search confirms only src/navigation/Root.navigator.tsx
+     references the screens/ path. App.tsx and tests are unaffected.
+
+     Verification
+
+     1. git status shows four renames (no content drift) plus the import
+     updates.
+     2. npm run lint — passes, no unresolved imports.
+     3. npm test — passes (or shows only the pre-existing unrelated Jest/ESM
+     failure in App.tsx).
+     4. npm run ios (or android) — Posts list and Details screen still work
+     end-to-end: list loads, tapping a row navigates, header star toggles
+     favorite, back-navigation reflects the change.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ Now update imports.
+
+⏺ Update(src/navigation/Posts.screen.tsx)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/navigation/Posts.screen.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      1  import { useCallback } from 'react';
+      2 -import { PostsContainer } from './Posts.container';             
+      3 -import { PostsScreenProps } from '../navigation/types';         
+      2 +import { PostsContainer } from '../containers/Posts.container'; 
+      3 +import { PostsScreenProps } from './types';                     
+      4  
+      5  export default function PostsScreen({ navigation }: PostsScreenP
+         rops) {
+      6    const handlePostPress = useCallback(
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/navigation/Details.screen.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      2  import { StyleSheet, Text } from 'react-native';
+      3  import { HeaderButton } from '@react-navigation/elements';
+      4  import { useFavoritesStore } from '../stores/favorites.store';
+      5 -import { DetailsScreenProps } from '../navigation/types';       
+      6 -import { DetailsContainer } from './Details.container';         
+      5 +import { DetailsScreenProps } from './types';                   
+      6 +import { DetailsContainer } from '../containers/Details.containe
+        +r';                                                             
+      7  
+      8  function FavoriteHeaderButton({ postId }: { postId: number }) {
+      9    const isFavorite = useFavoritesStore(s => s.favoriteIds.has(po
+         stId));
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/navigation/Root.navigator.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      1  import { createNativeStackNavigator } from '@react-navigation/na
+         tive-stack';
+      2 -import PostsScreen from '../screens/Posts.screen';              
+      3 -import DetailsScreen from '../screens/Details.screen';          
+      2 +import PostsScreen from './Posts.screen';                       
+      3 +import DetailsScreen from './Details.screen';                   
+      4  import { RootStackParamList } from './types';
+      5  
+      6  const Stack = createNativeStackNavigator<RootStackParamList>();
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Done. Final layout:
+
+  - src/navigation/ — Root.navigator.tsx, types.ts, Posts.screen.tsx,
+  Details.screen.tsx
+  - src/containers/ — Posts.container.tsx, Details.container.tsx
+  - src/screens/ — removed
+
+  Git tracked the two screen moves as renames (RM in git status); containers
+  show as untracked since they were never committed in the previous step. Lint
+  passes.
+
+✻ Cooked for 2m 2s
+
+❯ create a proper aliases for imports for containers, repos, stores in order to 
+   import like this '@container/*' etc.                                         
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ I'll wire up aliases for containers, repositories, stores. Need: tsconfig.json
+   paths (for the type checker), babel-plugin-module-resolver (for Metro at
+  runtime), and updated imports.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(babel.config.js)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(babel.config.js)
+  ⎿  Added 10 lines
+       2    presets: ['module:@react-native/babel-preset'],
+       3    plugins: [
+       4      ['babel-plugin-inline-import', { extensions: ['.sql'] }],
+       5 +    [                                                          
+       6 +      'module-resolver',                                       
+       7 +      {                                                        
+       8 +        alias: {                                               
+       9 +          '@containers': './src/containers',                   
+      10 +          '@repositories': './src/repositories',               
+      11 +          '@stores': './src/stores',                           
+      12 +        },                                                     
+      13 +      },                                                       
+      14 +    ],                                                         
+      15      'react-native-reanimated/plugin',
+      16    ],
+      17  };
+
+⏺ Update(tsconfig.json)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(tsconfig.json)
+  ⎿  Added 7 lines, removed 1 line
+       1  {
+       2    "extends": "@react-native/typescript-config",
+       3    "compilerOptions": {
+       4 -    "types": ["jest"]                                          
+       4 +    "types": ["jest"],                                         
+       5 +    "baseUrl": ".",                                            
+       6 +    "paths": {                                                 
+       7 +      "@containers/*": ["src/containers/*"],                   
+       8 +      "@repositories/*": ["src/repositories/*"],               
+       9 +      "@stores/*": ["src/stores/*"]                            
+      10 +    }                                                          
+      11    },
+      12    "include": ["**/*.ts", "**/*.tsx"],
+      13    "exclude": ["**/node_modules", "**/Pods"]
+
+⏺ Now rewrite the imports in the affected files.
+
+⏺ Update(src/navigation/Posts.screen.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  import { useCallback } from 'react';
+      2 -import { PostsContainer } from '../containers/Posts.container'; 
+      2 +import { PostsContainer } from '@containers/Posts.container';   
+      3  import { PostsScreenProps } from './types';
+      4  
+      5  export default function PostsScreen({ navigation }: PostsScreenP
+         rops) {
+
+⏺ Update(src/navigation/Details.screen.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      1  import { useLayoutEffect } from 'react';
+      2  import { StyleSheet, Text } from 'react-native';
+      3  import { HeaderButton } from '@react-navigation/elements';
+      4 -import { useFavoritesStore } from '../stores/favorites.store';  
+      4 +import { useFavoritesStore } from '@stores/favorites.store';    
+      5  import { DetailsScreenProps } from './types';
+      6 -import { DetailsContainer } from '../containers/Details.containe
+        -r';                                                             
+      6 +import { DetailsContainer } from '@containers/Details.container'
+        +;                                                               
+      7  
+      8  function FavoriteHeaderButton({ postId }: { postId: number }) {
+      9    const isFavorite = useFavoritesStore(s => s.favoriteIds.has(po
+         stId));
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/containers/Posts.container.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      12  import type { SwipeableMethods } from 'react-native-gesture-han
+          dler/ReanimatedSwipeable';
+      13  import { GestureDetector, useTapGesture } from 'react-native-ge
+          sture-handler';
+      14  import { runOnJS } from 'react-native-worklets';
+      15 -import { usePostsStore } from '../stores/posts.store';         
+      16 -import { useFavoritesStore } from '../stores/favorites.store'; 
+      15 +import { usePostsStore } from '@stores/posts.store';           
+      16 +import { useFavoritesStore } from '@stores/favorites.store';   
+      17  import type { Post } from '../db/schema';
+      18  
+      19  type PostRowProps = {
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  import { Image, ScrollView, StyleSheet, Text, View } from 'react
+         -native';
+      2 -import { usePostsStore } from '../stores/posts.store';          
+      2 +import { usePostsStore } from '@stores/posts.store';            
+      3  
+      4  type DetailsContainerProps = {
+      5    postId: number;
+
+⏺ Update(src/stores/favorites.store.ts)
+  ⎿  File must be read first
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/favorites.store.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { create } from 'zustand';
+      2 -import { favoritesRepository } from '../repositories/favorites.r
+        -epository';                                                     
+      2 +import { favoritesRepository } from '@repositories/favorites.rep
+        +ository';                                                       
+      3  
+      4  type FavoritesState = {
+      5    // Ordered most-recently-favorited first; Set preserves insert
+         ion order
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/posts.store.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { create } from 'zustand';
+      2  import { faker } from '@faker-js/faker';
+      3  import { fetchPosts } from '../api/posts.api';
+      4 -import { postsRepository } from '../repositories/posts.repositor
+        -y';                                                             
+      4 +import { postsRepository } from '@repositories/posts.repository'
+        +;                                                               
+      5  import type { Post } from '../db/schema';
+      6  
+      7  type PostsState = {
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Both clean. Summary:
+
+  Aliases added (matching folder names; plural):
+  - @containers/* → src/containers/*
+  - @repositories/* → src/repositories/*
+  - @stores/* → src/stores/*
+
+  Configured in:
+  - babel.config.js — added module-resolver plugin (installed
+  babel-plugin-module-resolver as devDependency) so Metro resolves at bundle
+  time.
+  - tsconfig.json — added baseUrl: "." + paths so TypeScript / IDE understand
+  them.
+
+  Imports rewritten in:
+  - src/navigation/Posts.screen.tsx, src/navigation/Details.screen.tsx
+  - src/containers/Posts.container.tsx, src/containers/Details.container.tsx
+  - src/stores/posts.store.ts, src/stores/favorites.store.ts
+
+  npm run lint and npx tsc --noEmit both pass. Note: Metro caches resolutions,
+  so restart it with npm start -- --reset-cache on the next run.
+
+  If you'd prefer singular (@container/*, @store/*, @repo/*) or want me to
+  extend the set (e.g. @api/*, @db/*, @navigation/*), say the word.
+
+✻ Worked for 2m 29s
+
+※ recap: Refactored screens into screen/container split, moved them into `src/navigation/` and `src/containers/`, and added path aliases `@containers`, `@repositories`, `@stores` in babel and tsconfig. Next: restart Metro with `npm start -- --reset-cache` to pick up the new aliases.
+
+❯ check '@db' import settings. In @src/repositories/favorites.repository.ts     
+  there is an error when try to import db/index files using alias               
+  ⎿  Read src/repositories/favorites.repository.ts (29 lines)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Found it — tsconfig.json is missing a comma between @stores/* and @db/*, which
+   makes the whole paths block invalid JSON and TS silently drops it.
+
+⏺ Update(tsconfig.json)
+  ⎿  Added 1 line, removed 1 line
+       6      "paths": {
+       7        "@containers/*": ["src/containers/*"],
+       8        "@repositories/*": ["src/repositories/*"],
+       9 -      "@stores/*": ["src/stores/*"]                            
+       9 +      "@stores/*": ["src/stores/*"],                           
+      10        "@db/*": ["src/db/*"]
+      11      }
+      12    },
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Type check and lint both clean. The issue was a missing comma in tsconfig.json
+   between "@stores/*" and "@db/*", which invalidated the JSON and made
+  TypeScript silently ignore the paths block — so @db/index and @db/schema
+  looked unresolved. Added the comma, both tsc --noEmit and eslint now pass.
+
+  Babel side (@db alias in babel.config.js) was already correct, so Metro will
+  resolve it fine after a cache reset (npm start -- --reset-cache).
+
+✻ Crunched for 26s
+
+❯ Need to extend current api requests to                                        
+  https://jsonplaceholder.typicode.com/posts, it also should get each post      
+  details from other endpoint -                                                 
+  https://jsonplaceholder.typicode.com/posts/{id}. Current data schema from     
+  post details endpoint is no differ from post list one and looks like {        
+    "userId": 10,                                                               
+    "id": 91,                                                                   
+    "title": "aut amet sed",                                                    
+    "body": "libero voluptate eveniet aperiam sed\nsunt placeat suscipit        
+  molestias\nsimilique fugit nam natus\nexpedita consequatur consequatur        
+  dolores quia eos et placeat"                                                  
+  }, but it can be changed in future. So, application first should cache the    
+  whole list of posts using one request. Then, every time when user click on    
+  particular post, the application shold cache also result of getting this post 
+   details and don't request in when user open it in future.                    
+
+⏺ This is a different task — fetching individual post details with caching. I'll
+   start a fresh plan. Let me explore first.
+
+  Read 3 files, listed 1 directory (ctrl+o to expand)
+
+⏺ I have what I need. One design choice matters before writing the plan.
+
+⏺ User answered Claude's questions:
+  ⎿  · How should the post-details cache be stored, given the details payload is
+      currently identical to the list item but may diverge later? → Separate 
+     post_details table now
+     · What should the details container show while the first details fetch is 
+     in flight? → Show spinner until details fetched
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Add cached per-post details fetch
+
+     Context
+
+     Today the app fetches the full list from
+     https://jsonplaceholder.typicode.com/posts once and caches it in the local
+     posts table; the Details screen reads from the in-memory list. We now want
+     the Details screen to also call
+     https://jsonplaceholder.typicode.com/posts/{id} and persist that response
+     so subsequent opens of the same post never refetch (across navigation and
+     across app restarts).
+
+     The details payload is currently the same shape as a list item but may
+     diverge in the future. To make that evolution painless, details get their
+     own table, repository, and store — posts stays as the "list" cache and is
+     untouched.
+
+     Design
+
+     Schema — new post_details table
+
+     src/db/schema.ts:
+
+     export const postDetails = sqliteTable('post_details', {
+       postId: integer('post_id').primaryKey().references(() => posts.id),
+       userId: integer('user_id').notNull(),
+       title: text('title').notNull(),
+       body: text('body').notNull(),
+       fetchedAt: integer('fetched_at').notNull(),
+     });
+
+     export type PostDetails = typeof postDetails.$inferSelect;
+     export type NewPostDetails = typeof postDetails.$inferInsert;
+
+     fetchedAt is a timestamp (cheap; leaves room for staleness eviction later).
+      The duplicated title/body are intentional — when the details API diverges
+     (e.g. adds comments or relatedPosts), we extend this table and posts stays
+     as the list cache.
+
+     Migration is generated via npx drizzle-kit generate per
+     [[feedback_drizzle_migrations]] (no hand-written CREATE TABLE). The new
+     0003_*.sql must be wired into src/db/migrations/migrations.ts next to
+     m0000…m0002.
+
+     API — src/api/posts.api.ts
+
+     Add alongside fetchPosts:
+
+     export async function fetchPostById(id: number): Promise<ApiPost> {
+       const response = await
+     fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+       if (!response.ok) {
+         throw new Error(`Fetch failed: ${response.status}`);
+       }
+       return response.json() as Promise<ApiPost>;
+     }
+
+     Reuses the existing ApiPost type and the same error pattern as fetchPosts.
+
+     Repository — src/repositories/post-details.repository.ts (new)
+
+     import { eq } from 'drizzle-orm';
+     import { db } from '@db/index';
+     import { postDetails } from '@db/schema';
+     import type { NewPostDetails } from '@db/schema';
+
+     export const postDetailsRepository = {
+       getById: (postId: number) => db.select()
+         .from(postDetails)
+         .where(eq(postDetails.postId, postId))
+         .get(),
+       upsert: (row: NewPostDetails) => db.insert(postDetails)
+         .values(row)
+         .onConflictDoUpdate({ target: postDetails.postId, set: row })
+         .run(),
+     };
+
+     Same shape as postsRepository and favoritesRepository.
+
+     Store — src/stores/post-details.store.ts (new)
+
+     Mirrors usePostsStore / useFavoritesStore per
+     [[feedback_state_architecture]] — components never touch the DB directly.
+
+     State:
+
+     type PostDetailsState = {
+       detailsById: Record<number, PostDetails>;
+       loadingIds: Set<number>;
+       errorById: Record<number, string>;
+       loadPostDetails: (id: number) => Promise<void>;
+     };
+
+     loadPostDetails(id):
+     1. If detailsById[id] already in memory → return.
+     2. Else read from postDetailsRepository.getById(id); if found, hydrate
+     detailsById[id] and return (no network).
+     3. Else mark loadingIds with id, call fetchPostById(id), upsert into the
+     repo with fetchedAt: Date.now(), set detailsById[id], clear loading.
+     4. On error, set errorById[id] and clear loading.
+
+     This satisfies "cache the result and don't request again on future opens"
+     across both same-session and across-restart cases.
+
+     UI — src/containers/Details.container.tsx
+
+     Currently reads the post from usePostsStore. Change to:
+
+     - Read imageUrl from the in-memory list (usePostsStore.posts.find(...)) —
+     the API has no image, so the list cache stays the source of truth for that.
+     - Read details (title, body, userId) from
+     usePostDetailsStore.detailsById[postId].
+     - Read usePostDetailsStore.loadingIds.has(postId) and errorById[postId].
+     - useEffect: call loadPostDetails(postId) on mount.
+     - Render rules:
+       - If errorById[postId] → error text (mirrors the Posts container error
+     view).
+       - Else if no cached details and loading → <ActivityIndicator size="large"
+      /> centered (matches Posts loading style).
+       - Else render the ScrollView body with image + title + body.
+
+     The "Post not found" branch (when the list doesn't contain the id) stays as
+      a guard for deep-link / inconsistent-state edge cases.
+
+     Files to change
+
+     - src/db/schema.ts — add postDetails table + types.
+     - src/db/migrations/0003_*.sql — generated by drizzle-kit generate.
+     - src/db/migrations/migrations.ts — import and register m0003.
+     - src/api/posts.api.ts — add fetchPostById.
+     - src/repositories/post-details.repository.ts — new file.
+     - src/stores/post-details.store.ts — new file.
+     - src/containers/Details.container.tsx — wire in the details store,
+     useEffect, loading/error states.
+
+     No changes to navigation, the screen file, or the Posts container.
+
+     Verification
+
+     1. npm run lint and npx tsc --noEmit — both clean.
+     2. npm run ios and walk through:
+       - Cold launch with the DB already populated from a prior run → Posts list
+      renders instantly.
+       - Tap a never-opened post → spinner appears, then details render. Network
+      panel shows one GET /posts/{id}.
+       - Back, tap the same post again → details render instantly, no spinner,
+     no network call.
+       - Kill the app, relaunch, tap that same post → details render instantly
+     from SQLite, no network call (proves persistence).
+       - Tap a different post → spinner + one network call, then cached forever
+     after.
+     3. Sanity-check the SQLite contents (optional): connect via op-sqlite shell
+      or a viewer and confirm post_details rows appear after each first-open.
+⏺ Update(src/db/schema.ts)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/db/schema.ts)
+  ⎿  Added 12 lines
+      13    createdAt: integer('created_at').notNull(),
+      14  });
+      15  
+      16 +export const postDetails = sqliteTable('post_details', {       
+      17 +  postId: integer('post_id')                                   
+      18 +    .primaryKey()                                              
+      19 +    .references(() => posts.id),                               
+      20 +  userId: integer('user_id').notNull(),                        
+      21 +  title: text('title').notNull(),                              
+      22 +  body: text('body').notNull(),                                
+      23 +  fetchedAt: integer('fetched_at').notNull(),                  
+      24 +});                                                            
+      25 +                                                               
+      26  export type Favorite = typeof favorites.$inferSelect;
+      27  export type Post = typeof posts.$inferSelect;
+      28  export type NewPost = typeof posts.$inferInsert;
+      29 +export type PostDetails = typeof postDetails.$inferSelect;     
+      30 +export type NewPostDetails = typeof postDetails.$inferInsert;  
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(src/db/migrations/migrations.ts)
+  ⎿  Added 2 lines
+      2  import m0000 from './0000_chubby_nocturne.sql';
+      3  import m0001 from './0001_next_strong_guy.sql';
+      4  import m0002 from './0002_violet_naoko.sql';
+      5 +import m0003 from './0003_tan_dreadnoughts.sql';                
+      6  
+      7  const migrations = {
+      8    journal,
+     ...
+      10      m0000,
+      11      m0001,
+      12      m0002,
+      13 +    m0003,                                                     
+      14    },
+      15  };
+      16  
+
+⏺ Update(src/api/posts.api.ts)
+  ⎿  Added 10 lines
+      14  
+      15    return response.json() as Promise<ApiPost[]>;
+      16  }
+      17 +                                                               
+      18 +export async function fetchPostById(id: number): Promise<ApiPos
+         +t> {                                                           
+      19 +  const response = await fetch(`https://jsonplaceholder.typicod
+         +e.com/posts/${id}`);                                           
+      20 +                                                               
+      21 +  if (!response.ok) {                                          
+      22 +    throw new Error(`Fetch failed: ${response.status}`);       
+      23 +  }                                                            
+      24 +                                                               
+      25 +  return response.json() as Promise<ApiPost>;                  
+      26 +}                                                              
+
+⏺ Write(src/repositories/post-details.repository.ts)
+  ⎿  Wrote 15 lines to src/repositories/post-details.repository.ts
+       1 import { eq } from 'drizzle-orm';
+       2 import { db } from '@db/index';
+       3 import { postDetails } from '@db/schema';
+       4 import type { NewPostDetails } from '@db/schema';
+       5 
+       6 export const postDetailsRepository = {
+       7   getById: (postId: number) => db.select()
+       8     .from(postDetails)
+       9     .where(eq(postDetails.postId, postId))
+      10     .get(),
+     … +5 lines (ctrl+o to expand)
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(src/stores/post-details.store.ts)
+  ⎿  Wrote 64 lines to src/stores/post-details.store.ts
+       1 import { create } from 'zustand';
+       2 import { fetchPostById } from '../api/posts.api';
+       3 import { postDetailsRepository } from '@repositories/post-detail
+         s.repository';
+       4 import type { PostDetails } from '@db/schema';
+       6 type PostDetailsState = {
+       7   detailsById: Record<number, PostDetails>;
+       8   loadingIds: Set<number>;
+       9   errorById: Record<number, string>;
+      10   loadPostDetails: (id: number) => Promise<void>;
+     … +58 lines (ctrl+o to expand)
+
+⏺ Write(src/containers/Details.container.tsx)
+  ⎿  Added 44 lines, removed 6 lines
+       1 -import { Image, ScrollView, StyleSheet, Text, View } from 'reac
+         -t-native';                                                     
+       1 +import { useEffect } from 'react';                             
+       2 +import {                                                       
+       3 +  ActivityIndicator,                                           
+       4 +  Image,                                                       
+       5 +  ScrollView,                                                  
+       6 +  StyleSheet,                                                  
+       7 +  Text,                                                        
+       8 +  View,                                                        
+       9 +} from 'react-native';                                         
+      10  import { usePostsStore } from '@stores/posts.store';
+      11 +import { usePostDetailsStore } from '@stores/post-details.store
+         +';                                                             
+      12  
+      13  type DetailsContainerProps = {
+      14    postId: number;
+      15  };
+      16  
+      17  export function DetailsContainer({ postId }: DetailsContainerPr
+          ops) {
+       9 -  const post = usePostsStore(s => s.posts.find(p => p.id === po
+         -stId));                                                        
+      18 +  const listPost = usePostsStore(s => s.posts.find(p => p.id ==
+         += postId));                                                    
+      19 +  const details = usePostDetailsStore(s => s.detailsById[postId
+         +]);                                                            
+      20 +  const isLoading = usePostDetailsStore(s => s.loadingIds.has(p
+         +ostId));                                                       
+      21 +  const error = usePostDetailsStore(s => s.errorById[postId]); 
+      22 +  const loadPostDetails = usePostDetailsStore(s => s.loadPostDe
+         +tails);                                                        
+      23  
+      11 -  if (!post) {                                                 
+      24 +  useEffect(() => {                                            
+      25 +    loadPostDetails(postId);                                   
+      26 +  }, [loadPostDetails, postId]);                               
+      27 +                                                               
+      28 +  if (!listPost) {                                             
+      29      return (
+      30        <View style={styles.centered}>
+      31          <Text>Post not found.</Text>
+     ...
+      33      );
+      34    }
+      35  
+      36 +  if (error) {                                                 
+      37 +    return (                                                   
+      38 +      <View style={styles.centered}>                           
+      39 +        <Text style={styles.errorText}>{error}</Text>          
+      40 +      </View>                                                  
+      41 +    );                                                         
+      42 +  }                                                            
+      43 +                                                               
+      44 +  if (!details || isLoading) {                                 
+      45 +    return (                                                   
+      46 +      <View style={styles.centered}>                           
+      47 +        <ActivityIndicator size="large" />                     
+      48 +      </View>                                                  
+      49 +    );                                                         
+      50 +  }                                                            
+      51 +                                                               
+      52    return (
+      53      <ScrollView
+      54        contentContainerStyle={styles.container}
+      55        contentInsetAdjustmentBehavior="automatic">
+      23 -      <Image source={{ uri: post.imageUrl }} style={styles.imag
+         -e} />                                                          
+      24 -      <Text style={styles.title}>{post.title}</Text>           
+      25 -      <Text style={styles.body}>{post.body}</Text>             
+      56 +      <Image source={{ uri: listPost.imageUrl }} style={styles.
+         +image} />                                                      
+      57 +      <Text style={styles.title}>{details.title}</Text>        
+      58 +      <Text style={styles.body}>{details.body}</Text>          
+      59      </ScrollView>
+      60    );
+      61  }
+     ...
+      66      alignItems: 'center',
+      67      justifyContent: 'center',
+      68    },
+      69 +  errorText: {                                                 
+      70 +    color: 'red',                                              
+      71 +    textAlign: 'center',                                       
+      72 +    marginHorizontal: 24,                                      
+      73 +  },                                                           
+      74    container: {
+      75      padding: 16,
+      76      margin: 16,
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(src/stores/post-details.store.ts)
+  ⎿  Added 3 lines, removed 2 lines
+      28      set(state => {
+      29        const next = new Set(state.loadingIds);
+      30        next.add(id);
+      31 -      const { [id]: _removed, ...rest } = state.errorById;     
+      32 -      return { loadingIds: next, errorById: rest };            
+      31 +      const nextErrors = { ...state.errorById };               
+      32 +      delete nextErrors[id];                                   
+      33 +      return { loadingIds: next, errorById: nextErrors };      
+      34      });
+      35  
+      36      try {
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Done. Lint and type check both pass.
+
+  What was added:
+  - src/db/schema.ts — postDetails table (postId PK FK→posts, userId, title,
+  body, fetchedAt) + PostDetails/NewPostDetails types.
+  - src/db/migrations/0003_tan_dreadnoughts.sql (generated by drizzle-kit 
+  generate) and wired into migrations.ts.
+  - src/api/posts.api.ts — fetchPostById(id) calling /posts/{id}.
+  - src/repositories/post-details.repository.ts — getById + upsert.
+  - src/stores/post-details.store.ts — usePostDetailsStore with detailsById,
+  loadingIds, errorById, and loadPostDetails(id) that: returns if in memory →
+  reads SQLite → only fetches network if neither hit.
+  - src/containers/Details.container.tsx — calls loadPostDetails(postId) on
+  mount; renders spinner until details are cached, then shows title/body from
+  the details store (image still comes from the list cache since the API doesn't
+   provide one).
+
+  Manual checks to run on device (npm run ios):
+  - Tap a fresh post → spinner → details. Back, tap again → instant.
+  - Kill app, relaunch, tap same post → instant (from SQLite, no network).
+  - Tap a new post → spinner + one GET /posts/{id}, cached thereafter.
+
+  Since this added a Drizzle migration, the new post_details table will be
+  created automatically on the next app launch via useMigrations in App.tsx.
+  Metro may need a cache reset (npm start -- --reset-cache) so the new .sql is
+  bundled.
+
+✻ Worked for 5m 17s
+
+※ recap: We're adding cached per-post details fetching to the React Native app: new `post_details` table, repository, store, and updated Details container are all in place, with lint and type check passing. Next, run `npm run ios` to verify spinner-then-details flow and persistence across app restarts.
+
+❯ I want to make sure that this small images in post list screen are not loaded 
+   each time and that they actually cached                                      
+
+⏺ This is a new concern (image caching) different from the previous plan. Let me
+   explore first.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Findings:
+  - URLs come from faker.image.urlPicsumPhotos(...) and are stored in SQLite per
+   row, so the same row always points to the same image URL.
+  - Two <Image> consumers: Posts.container.tsx:71 (thumbnail) and
+  Details.container.tsx:56.
+  - No image-cache library installed today.
+
+  RN's built-in <Image> relies on NSURLCache (iOS) / OkHttp cache (Android),
+  driven by response Cache-Control headers. picsum does send cache headers, but
+  disk eviction is opaque and not guaranteed. For "make sure" caching, the usual
+   move is a dedicated library.
+
+⏺ User answered Claude's questions:
+  ⎿  · Which approach should I use to guarantee thumbnails are cached? → 
+     @d11/react-native-fast-image (Recommended)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Persist-cache post thumbnails with @d11/react-native-fast-image
+
+     Context
+
+     Post-list thumbnails (25×25 picsum URLs stored per row in SQLite) currently
+      render through React Native's built-in <Image>, which leans on NSURLCache
+     (iOS) / OkHttp cache (Android). Those caches honor picsum's Cache-Control
+     headers but offer no LRU guarantees and can silently evict, causing visible
+      re-downloads when scrolling or relaunching. We want the thumbnails (and
+     the Details image) to come from a real persistent disk cache so the same
+     URL never hits the network twice in practice.
+
+     @d11/react-native-fast-image is the maintained fork of
+     react-native-fast-image and wraps SDWebImage (iOS) + Glide (Android), both
+     of which ship with disk-backed LRU caches managed natively. It works with
+     the New Architecture (which this project has enabled — see CLAUDE.md). The
+     two <Image source={{ uri }} /> call sites swap to <FastImage source={{ uri 
+     }} />.
+
+     Design
+
+     Install
+
+     - npm install @d11/react-native-fast-image
+     - bundle exec pod install from ios/ (per CLAUDE.md: CocoaPods manages all
+     iOS deps).
+     - No Android Gradle step is required (autolinking).
+
+     Wrap with a thin internal component — src/components/CachedImage.tsx (new)
+
+     A tiny adapter so the rest of the codebase doesn't import the vendor name
+     directly. Future migrations (e.g. to expo-image) only touch this one file.
+
+     import FastImage, { type FastImageProps } from
+     '@d11/react-native-fast-image';
+
+     export type CachedImageProps = FastImageProps;
+
+     export function CachedImage(props: CachedImageProps) {
+       return <FastImage {...props} />;
+     }
+
+     (One file, one re-export — does not add abstraction beyond what's needed,
+     per the project's no-premature-abstraction rule.)
+
+     Swap two call sites
+
+     - src/containers/Posts.container.tsx:71 — replace <Image source={{ uri: 
+     item.imageUrl }} style={styles.thumbnail} /> with <CachedImage source={{ 
+     uri: item.imageUrl }} style={styles.thumbnail} />. Remove Image from the
+     react-native import if no longer used.
+     - src/containers/Details.container.tsx:56 — same substitution for the
+     details image.
+
+     FastImage's source.uri accepts the same shape, so URLs flow through
+     unchanged. No prop renames needed for our usage.
+
+     Cache control defaults
+
+     FastImage's default cache policy is immutable (cache forever once
+     downloaded), which is exactly what we want for stable picsum URLs. No
+     explicit cache prop required. We do not need to call FastImage.preload(...)
+      — the SectionList renders rows lazily and SDWebImage/Glide handle
+     concurrency.
+
+     Files to change
+
+     - package.json / ios/Podfile.lock — new dependency.
+     - src/components/CachedImage.tsx — new thin wrapper.
+     - src/containers/Posts.container.tsx — swap <Image> for <CachedImage>.
+     - src/containers/Details.container.tsx — swap <Image> for <CachedImage>.
+
+     No schema, store, or repository changes.
+
+     Verification
+
+     1. npm run lint and npx tsc --noEmit — both clean.
+     2. npm run ios (after bundle exec pod install):
+       - Cold launch with empty caches → list scrolls, network panel shows one
+     request per unique URL.
+       - Scroll the same rows up/down many times → no additional network
+     requests.
+       - Open Details, back, reopen → no additional request for that image.
+       - Kill app, relaunch → thumbnails appear instantly with no network
+     requests (proves disk cache).
+       - Optionally enable airplane mode after a warm cache and confirm
+     thumbnails still render.
+     3. Optional Android pass via npm run android confirms Glide is doing its
+     job.
+  Ran 2 shell commands (ctrl+o to expand)
+
+  Searched for 4 patterns, listed 3 directories, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Good — FastImageProps is exported. Creating the wrapper.
+
+⏺ Write(src/components/CachedImage.tsx)
+  ⎿  Wrote 7 lines to src/components/CachedImage.tsx
+      1 import FastImage, { type FastImageProps } from '@d11/react-native
+        -fast-image';
+      2 
+      3 export type CachedImageProps = FastImageProps;
+      4 
+      5 export function CachedImage(props: CachedImageProps) {
+      6   return <FastImage {...props} />;
+      7 }
+
+⏺ Update(src/containers/Posts.container.tsx)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/containers/Posts.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+       1  import { memo, useCallback, useEffect, useMemo, useRef } from '
+          react';
+       2  import {
+       3    ActivityIndicator,
+       4 -  Image,                                                       
+       4    Pressable,
+       5    SectionList,
+       6    StyleSheet,
+       7    Text,
+       8    View,
+       9  } from 'react-native';
+      10 +import { CachedImage } from '../components/CachedImage';       
+      11  import ReanimatedSwipeable from 'react-native-gesture-handler/R
+          eanimatedSwipeable';
+      12  import type { SwipeableMethods } from 'react-native-gesture-han
+          dler/ReanimatedSwipeable';
+      13  import { GestureDetector, useTapGesture } from 'react-native-ge
+          sture-handler';
+
+⏺ Update(src/containers/Posts.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+      70        }}>
+      71        <GestureDetector gesture={tapGesture}>
+      72          <View style={styles.row}>
+      73 -          <Image onLoad={() => console.log(`onLoadEvent for ima
+         -ge: ${item.id}: ${item.imageUrl}`)} source={{ uri: item.imageUr
+         -l }} style={styles.thumbnail} />                               
+      73 +          <CachedImage onLoad={() => console.log(`onLoadEvent f
+         +or image: ${item.id}: ${item.imageUrl}`)} source={{ uri: item.i
+         +mageUrl }} style={styles.thumbnail} />                         
+      74            <Text style={styles.title}>{item.title}</Text>
+      75            {isFavorite && <Text style={styles.favoriteBadge}>★</
+          Text>}
+      76          </View>
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+       1  import { useEffect } from 'react';
+       2  import {
+       3    ActivityIndicator,
+       4 -  Image,                                                       
+       4    ScrollView,
+       5    StyleSheet,
+       6    Text,
+       7    View,
+       8  } from 'react-native';
+       9 +import { CachedImage } from '../components/CachedImage';       
+      10  import { usePostsStore } from '@stores/posts.store';
+      11  import { usePostDetailsStore } from '@stores/post-details.store
+          ';
+      12  
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+      53      <ScrollView
+      54        contentContainerStyle={styles.container}
+      55        contentInsetAdjustmentBehavior="automatic">
+      56 -      <Image source={{ uri: listPost.imageUrl }} style={styles.
+         -image} />                                                      
+      56 +      <CachedImage source={{ uri: listPost.imageUrl }} style={s
+         +tyles.image} />                                                
+      57        <Text style={styles.title}>{details.title}</Text>
+      58        <Text style={styles.body}>{details.body}</Text>
+      59      </ScrollView>
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ Done. Lint and type check both pass.
+
+  Changes:
+  - Installed @d11/react-native-fast-image and ran bundle exec pod install (37s;
+   88 pods integrated).
+  - src/components/CachedImage.tsx — thin wrapper re-exporting FastImage under a
+   vendor-neutral name.
+  - src/containers/Posts.container.tsx — swapped <Image> for <CachedImage> on
+  the thumbnail (kept the existing onLoad console.log so you can confirm cache
+  hits on subsequent renders/launches).
+  - src/containers/Details.container.tsx — swapped <Image> for <CachedImage> on
+  the details image.
+
+  FastImage defaults to cache: 'immutable', so the SDWebImage (iOS) / Glide
+  (Android) disk caches will hold each picsum URL across sessions.
+
+  To validate on device (npm run ios):
+  - Cold launch, scroll the list — one network request per unique URL.
+  - Scroll up/down, open/close Details — no further requests, onLoad should fire
+   from the local cache.
+  - Kill the app, relaunch — thumbnails appear instantly, no network.
+  Airplane-mode after warming up confirms persistence.
+
+  Note: Metro may need npm start -- --reset-cache so it picks up the new native
+  module.
+
+✻ Brewed for 4m 24s
+
+❯ I want also add console log with information about each image if it loads     
+  image or does it use cached one                                               
+
+⏺ Before coding, I need to check what FastImage actually exposes — its built-in
+  onLoad fires whether the image came from cache or network, so distinguishing
+  the two isn't free.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Heads up — FastImage's onLoad event only carries width/height.
+  SDWebImage/Glide know internally whether a load was a cache hit, but the
+  binding doesn't surface a fromCache flag. So a true cache/non-cache log isn't
+  available without patching native code. I'd like to confirm which heuristic to
+   use:
+
+⏺ User declined to answer questions
+  ⎿  · How should we infer 'cached vs loaded' in the console log, given 
+     FastImage doesn't expose it directly? (Timing-based (Recommended) / 
+     Session-seen set / Both combined)
+
+❯ When I go to page details, I also want to load image from FakeJS but in       
+  different resolution 300х300. It also should use CachedImage component.       
+
+⏺ Two design choices to confirm before coding — these matter for whether the
+  caching actually works:
+
+⏺ User answered Claude's questions:
+  ⎿  · Where should the 300×300 URL come from? → Generate in Details with stable
+      seed
+     · Should the Details image visually match the thumbnail? → Yes — same 
+     picsum, just larger
+
+⏺ Writing fresh plan — this is a different task from the previous image-cache
+  one.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭─────────────────────────────────────────────────────────────────────────╮
+     │ Add a 300×300 details image that matches the thumbnail                  │
+     │                                                                         │
+     │ Context                                                                 │
+     │                                                                         │
+     │ The Posts list shows a 25×25 picsum thumbnail. We want the Details      │
+     │ screen to also show a picsum image — at 300×300, of the same photo as   │
+     │ the thumbnail, rendered through <CachedImage> so it persists in         │
+     │ FastImage's disk cache. The current posts.imageUrl column is filled by  │
+     │ faker.image.urlPicsumPhotos({ width: 25, height: 25 }) with no seed, so │
+     │  each row holds a random URL. To make a larger version of the same      │
+     │ photo at details time, both URLs must be derived from the same seed —   │
+     │ the easiest seed is the post's id.                                      │
+     │                                                                         │
+     │ Once URLs are a pure function of id + size, the stored posts.imageUrl   │
+     │ column is redundant: we can compute it on demand. Removing the column   │
+     │ keeps the cache "URL = f(id, size)" obvious and removes a row-level     │
+     │ field that was always a random faker call.                              │
+     │                                                                         │
+     │ Design                                                                  │
+     │                                                                         │
+     │ URL derivation                                                          │
+     │                                                                         │
+     │ Add one helper in src/api/posts.api.ts:                                 │
+     │                                                                         │
+     │ import { faker } from '@faker-js/faker';                                │
+     │                                                                         │
+     │ export function getPostImageUrl(postId: number, size: number): string { │
+     │   return faker.image.urlPicsumPhotos({                                  │
+     │     seed: String(postId),                                               │
+     │     width: size,                                                        │
+     │     height: size,                                                       │
+     │   });                                                                   │
+     │ }                                                                       │
+     │                                                                         │
+     │ Result is stable per (postId, size) — e.g.                              │
+     │ https://picsum.photos/seed/17/25/25 and                                 │
+     │ https://picsum.photos/seed/17/300/300 — same picsum photo, two cache    │
+     │ entries.                                                                │
+     │                                                                         │
+     │ Schema — drop posts.imageUrl                                            │
+     │                                                                         │
+     │ src/db/schema.ts: remove the imageUrl column from the posts table.      │
+     │ Regenerate via npx drizzle-kit generate (per                            │
+     │ [[feedback_drizzle_migrations]]) — drizzle handles SQLite's lack of a   │
+     │ native DROP COLUMN by doing a table-recreate when needed. Wire the new  │
+     │ 0004_*.sql into src/db/migrations/migrations.ts.                        │
+     │                                                                         │
+     │ Store — stop persisting imageUrl                                        │
+     │                                                                         │
+     │ src/stores/posts.store.ts: drop the imageUrl:                           │
+     │ faker.image.urlPicsumPhotos(...) line and the faker import (now only    │
+     │ used by the helper). postsRepository.insertMany continues to insert     │
+     │ id/userId/title/body (those match the Post shape after the column       │
+     │ removal).                                                               │
+     │                                                                         │
+     │ UI — use the helper at both call sites                                  │
+     │                                                                         │
+     │ - src/containers/Posts.container.tsx — in the PostRow, replace          │
+     │ item.imageUrl with getPostImageUrl(item.id, 25).                        │
+     │ - src/containers/Details.container.tsx — add a memoized imageUrl =      │
+     │ useMemo(() => getPostImageUrl(postId, 300), [postId]) and use it on a   │
+     │ 300×300 <CachedImage style={styles.image} />. Bump the existing         │
+     │ styles.image from 25×25 to 300×300 so the larger asset is actually      │
+     │ shown. listPost.imageUrl reads disappear.                               │
+     │                                                                         │
+     │ FastImage will treat each (size) URL as its own cache key — 25×25 and   │
+     │ 300×300 are cached independently, both with the default cache:          │
+     │ 'immutable' policy added in the previous step.                          │
+     │                                                                         │
+     │ Files to change                                                         │
+     │                                                                         │
+     │ - src/db/schema.ts — drop imageUrl.                                     │
+     │ - src/db/migrations/0004_*.sql — generated by drizzle-kit generate.     │
+     │ - src/db/migrations/migrations.ts — register m0004.                     │
+     │ - src/api/posts.api.ts — add getPostImageUrl (+ faker import).          │
+     │ - src/stores/posts.store.ts — remove imageUrl field + faker import.     │
+     │ - src/containers/Posts.container.tsx — use getPostImageUrl(item.id,     │
+     │ 25).                                                                    │
+     │ - src/containers/Details.container.tsx — add the 300×300 <CachedImage>  │
+     │ via the helper, update styles.image dimensions.                         │
+     │                                                                         │
+     │ Verification                                                            │
+     │                                                                         │
+     │ 1. npm run lint and npx tsc --noEmit — both clean.                      │
+     │ 2. npm run ios:                                                         │
+     │   - On a fresh DB (the column drop forces a table recreate, so an       │
+     │ existing app install may need data wiped or a Metro reset; document     │
+     │ this), the list renders thumbnails sourced from getPostImageUrl(id,     │
+     │ 25).                                                                    │
+     │   - Tapping a post shows a clearly larger 300×300 image of visibly the  │
+     │ same picsum photo as the thumbnail.                                     │
+     │   - Back, reopen same post → details image renders instantly (FastImage │
+     │  memory + disk cache).                                                  │
+     │   - Kill the app, relaunch, reopen same post → details image still      │
+     │ instant from disk (proves persistence).                                 │
+     │   - Tapping a different post for the first time fetches the new 300×300 │
+     │  URL once, then cached forever after.                                   │
+     │ 3. Optional sanity: the URLs in the network panel should be of the form │
+     │  https://picsum.photos/seed/<id>/25/25 and                              │
+     │ https://picsum.photos/seed/<id>/300/300.                                │
+     ╰─────────────────────────────────────────────────────────────────────────╯
+
+⏺ Got it — faker is the enrichment layer at the API boundary, not a render-time
+  URL builder. The details image is its own random picsum stored in post_details
+   alongside title/body. Rewriting the plan.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭─────────────────────────────────────────────────────────────────────────╮
+     │ Cache a 300×300 details image in post_details                           │
+     │                                                                         │
+     │ Context                                                                 │
+     │                                                                         │
+     │ The post list already caches an enriched imageUrl (25×25 picsum) on     │
+     │ each posts row at list-fetch time. We want the same pattern for         │
+     │ details: when /posts/{id} is fetched, enrich the API response with a    │
+     │ 300×300 picsum URL via faker and persist it alongside                   │
+     │ title/body/fetchedAt in the post_details table. The Details screen then │
+     │  renders that cached URL through <CachedImage>.                         │
+     │                                                                         │
+     │ faker is used only as enrichment of the API call (because the           │
+     │ JSONPlaceholder endpoint doesn't return an image). Each cache layer     │
+     │ (list, details) owns its own URL — they're independent random picsum    │
+     │ images, not derived from a shared seed.                                 │
+     │                                                                         │
+     │ Design                                                                  │
+     │                                                                         │
+     │ Schema — add imageUrl to post_details                                   │
+     │                                                                         │
+     │ src/db/schema.ts:                                                       │
+     │                                                                         │
+     │ export const postDetails = sqliteTable('post_details', {                │
+     │   postId: integer('post_id').primaryKey().references(() => posts.id),   │
+     │   userId: integer('user_id').notNull(),                                 │
+     │   title: text('title').notNull(),                                       │
+     │   body: text('body').notNull(),                                         │
+     │   imageUrl: text('image_url').notNull(),  // NEW                        │
+     │   fetchedAt: integer('fetched_at').notNull(),                           │
+     │ });                                                                     │
+     │                                                                         │
+     │ Generate via npx drizzle-kit generate (per                              │
+     │ [[feedback_drizzle_migrations]]). Wire the new 0004_*.sql into          │
+     │ src/db/migrations/migrations.ts as m0004.                               │
+     │                                                                         │
+     │ Drizzle-kit will produce a SQLite table-recreate (since we're adding a  │
+     │ NOT NULL column). Existing rows in post_details (if any from previous   │
+     │ testing) won't survive the recreate — fine, the cache will simply       │
+     │ re-populate on next open.                                               │
+     │                                                                         │
+     │ Store — enrich at the API boundary                                      │
+     │                                                                         │
+     │ src/stores/post-details.store.ts: mirror the enrichment pattern from    │
+     │ posts.store.ts. When fetchPostById(id) resolves, augment with imageUrl  │
+     │ before upserting:                                                       │
+     │                                                                         │
+     │ import { faker } from '@faker-js/faker';                                │
+     │ // ...                                                                  │
+     │ const apiPost = await fetchPostById(id);                                │
+     │ const row: PostDetails = {                                              │
+     │   postId: apiPost.id,                                                   │
+     │   userId: apiPost.userId,                                               │
+     │   title: apiPost.title,                                                 │
+     │   body: apiPost.body,                                                   │
+     │   imageUrl: faker.image.urlPicsumPhotos({ width: 300, height: 300 }),   │
+     │   fetchedAt: Date.now(),                                                │
+     │ };                                                                      │
+     │ await postDetailsRepository.upsert(row);                                │
+     │                                                                         │
+     │ The DB-cached path (when postDetailsRepository.getById(id) returns a    │
+     │ row) needs no change — it already returns the persisted imageUrl.       │
+     │                                                                         │
+     │ UI — render the cached 300×300 image                                    │
+     │                                                                         │
+     │ src/containers/Details.container.tsx:                                   │
+     │                                                                         │
+     │ - Replace <CachedImage source={{ uri: listPost.imageUrl }}              │
+     │ style={styles.image} /> with <CachedImage source={{ uri:                │
+     │ details.imageUrl }} style={styles.image} />. The 25×25 thumbnail URL    │
+     │ from the list is no longer used here.                                   │
+     │ - Bump styles.image from 25×25 to 300×300 so the larger asset is        │
+     │ actually rendered (and centered/contained as desired).                  │
+     │                                                                         │
+     │ No change to the loading/error gating — those still wait on details     │
+     │ being present, which now also guarantees imageUrl is set.               │
+     │                                                                         │
+     │ Files to change                                                         │
+     │                                                                         │
+     │ - src/db/schema.ts — add imageUrl text column to postDetails.           │
+     │ - src/db/migrations/0004_*.sql — generated by drizzle-kit generate.     │
+     │ - src/db/migrations/migrations.ts — register m0004.                     │
+     │ - src/stores/post-details.store.ts — import faker, add imageUrl         │
+     │ enrichment to the network branch.                                       │
+     │ - src/containers/Details.container.tsx — render details.imageUrl at     │
+     │ 300×300.                                                                │
+     │                                                                         │
+     │ No change to the Posts list, the posts table, posts.store.ts, or the    │
+     │ thumbnail rendering.                                                    │
+     │                                                                         │
+     │ Verification                                                            │
+     │                                                                         │
+     │ 1. npm run lint and npx tsc --noEmit — both clean.                      │
+     │ 2. npm run ios and walk through:                                        │
+     │   - Open a never-opened post → details screen shows spinner, then a     │
+     │ 300×300 picsum image plus title/body. Network panel shows one GET       │
+     │ /posts/{id} and one image download.                                     │
+     │   - Back, reopen the same post → both data and image render instantly   │
+     │ with no network calls.                                                  │
+     │   - Kill the app, relaunch, reopen the same post → instant (proves both │
+     │  post_details row and the FastImage disk cache survive).                │
+     │   - Open a different post → fresh fetch + image download, then cached   │
+     │ forever.                                                                │
+     │ 3. Inspect the SQLite store (optional) and confirm post_details rows    │
+     │ include an image_url value.                                             │
+     ╰─────────────────────────────────────────────────────────────────────────╯
+
+⏺ Got it — shared id-based seed at the enrichment layer, so both stores use the
+  same helper and produce matching picsum photos at different sizes. Updating
+  the plan.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Cache a matching 300×300 details image alongside the 25×25 thumbnail
+
+     Context
+
+     The post list already enriches the API response with an imageUrl (25×25
+     picsum) and persists it to the posts table. We want the same pattern for
+     details: enrich the /posts/{id} API response with a imageUrl (300×300
+     picsum) and persist it to the post_details table. Both URLs are generated
+     via faker.js at the enrichment step (i.e. inside the store, right after the
+      API call), never at render time.
+
+     To make the thumbnail and the details image visibly the same picsum photo,
+     both URLs share a stable seed derived from the post id. A single helper
+     centralizes the call so the list-enrichment and the details-enrichment use
+     it identically — only the size differs.
+
+     Design
+
+     Helper — getPostImageUrl(postId, size)
+
+     Add to src/api/posts.api.ts (the enrichment layer, alongside the fetch
+     helpers):
+
+     import { faker } from '@faker-js/faker';
+
+     export function getPostImageUrl(postId: number, size: number): string {
+       return faker.image.urlPicsumPhotos({
+         seed: String(postId),
+         width: size,
+         height: size,
+       });
+     }
+
+     Outputs https://picsum.photos/seed/<postId>/<size>/<size> — same picsum
+     photo across sizes, deterministic per postId.
+
+     Schema — add imageUrl to post_details
+
+     src/db/schema.ts:
+
+     export const postDetails = sqliteTable('post_details', {
+       postId: integer('post_id').primaryKey().references(() => posts.id),
+       userId: integer('user_id').notNull(),
+       title: text('title').notNull(),
+       body: text('body').notNull(),
+       imageUrl: text('image_url').notNull(),  // NEW
+       fetchedAt: integer('fetched_at').notNull(),
+     });
+
+     Generated via npx drizzle-kit generate (per
+     [[feedback_drizzle_migrations]]); wired into
+     src/db/migrations/migrations.ts as m0004. Drizzle-kit will recreate the
+     SQLite table to add the NOT NULL column — any existing post_details rows
+     will be wiped, and the cache will repopulate on next open.
+
+     posts schema stays the same — imageUrl column is already there.
+
+     Stores — use the shared helper at the enrichment step
+
+     src/stores/posts.store.ts — change the list enrichment to use the helper
+     (no longer importing faker directly):
+
+     import { fetchPosts, getPostImageUrl } from '@api/posts.api';
+     // ...
+     const toInsert = apiPosts.map(p => ({
+       ...p,
+       imageUrl: getPostImageUrl(p.id, 25),
+     }));
+
+     src/stores/post-details.store.ts — same pattern on the network branch:
+
+     import { fetchPostById, getPostImageUrl } from '@api/posts.api';
+     // ...
+     const apiPost = await fetchPostById(id);
+     const row: PostDetails = {
+       postId: apiPost.id,
+       userId: apiPost.userId,
+       title: apiPost.title,
+       body: apiPost.body,
+       imageUrl: getPostImageUrl(apiPost.id, 300),
+       fetchedAt: Date.now(),
+     };
+
+     The DB-cached branch (postDetailsRepository.getById(id) hit) needs no
+     changes — it already returns the persisted imageUrl.
+
+     Note: any posts rows cached before this change carry the old random URL (no
+      seed). For a clean visual match in dev, delete the SQLite store once. I'll
+      add an @api alias if the import path looks better; otherwise use the
+     existing relative path '../api/posts.api'.
+
+     UI — Details renders the cached 300×300
+
+     src/containers/Details.container.tsx:
+
+     - Switch from listPost.imageUrl to details.imageUrl for the <CachedImage>
+     source.
+     - Bump styles.image from 25×25 to 300×300 so the larger asset shows.
+     - Loading / error gating stays as-is (still keyed on details being
+     present).
+
+     Files to change
+
+     - src/api/posts.api.ts — add getPostImageUrl.
+     - src/db/schema.ts — add imageUrl text column to postDetails.
+     - src/db/migrations/0004_*.sql — generated by drizzle-kit generate.
+     - src/db/migrations/migrations.ts — register m0004.
+     - src/stores/posts.store.ts — call getPostImageUrl(p.id, 25); drop the
+     direct faker import.
+     - src/stores/post-details.store.ts — call getPostImageUrl(apiPost.id, 300);
+      drop the direct faker import.
+     - src/containers/Details.container.tsx — render details.imageUrl at
+     300×300.
+
+     No change to the Posts list rendering (thumbnail still reads item.imageUrl
+     from the cached row).
+
+     Verification
+
+     1. npm run lint and npx tsc --noEmit — both clean.
+     2. npm run ios (clear app data first for a clean dev DB):
+       - List renders with seeded 25×25 thumbnails.
+       - Tap a post → spinner → 300×300 picsum of visibly the same photo as the
+     thumbnail. Network panel: one GET /posts/{id} + one image download.
+       - Back, reopen the same post → both data and image are instant (no
+     network).
+       - Kill the app, relaunch, reopen → still instant (proves post_details row
+      + FastImage disk cache both persisted).
+       - Open a different post → fresh detail fetch + image download, cached
+     forever after.
+     3. Inspect SQLite (optional): post_details rows contain an image_url like
+     https://picsum.photos/seed/<id>/300/300, and the matching posts row's
+     image_url shares the same seed at /25/25.
+
+⏺ Saving the architectural preference about faker usage before I forget — it was
+   a non-obvious correction.
+
+  Recalled 1 memory, wrote 2 memories (ctrl+o to expand)
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/api/posts.api.ts)
+  ⎿  Added 10 lines
+      1 +import { faker } from '@faker-js/faker';                        
+      2 +                                                                
+      3  export type ApiPost = {
+      4    id: number;
+      5    userId: number;
+     ...
+       7    body: string;
+       8  };
+       9  
+      10 +export function getPostImageUrl(postId: number, size: number): 
+         +string {                                                       
+      11 +  return faker.image.urlPicsumPhotos({                         
+      12 +    seed: String(postId),                                      
+      13 +    width: size,                                               
+      14 +    height: size,                                              
+      15 +  });                                                          
+      16 +}                                                              
+      17 +                                                               
+      18  export async function fetchPosts(): Promise<ApiPost[]> {
+      19    const response = await fetch('https://jsonplaceholder.typicod
+          e.com/posts');
+      20  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/db/schema.ts)
+  ⎿  Added 1 line
+      30    userId: integer('user_id').notNull(),
+      31    title: text('title').notNull(),
+      32    body: text('body').notNull(),
+      33 +  imageUrl: text('image_url').notNull(),                       
+      34    fetchedAt: integer('fetched_at').notNull(),
+      35  });
+      36  
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(src/db/migrations/migrations.ts)
+  ⎿  Added 2 lines
+      3  import m0001 from './0001_next_strong_guy.sql';
+      4  import m0002 from './0002_violet_naoko.sql';
+      5  import m0003 from './0003_tan_dreadnoughts.sql';
+      6 +import m0004 from './0004_busy_sunspot.sql';                    
+      7  
+      8  const migrations = {
+      9    journal,
+     ...
+      12      m0001,
+      13      m0002,
+      14      m0003,
+      15 +    m0004,                                                     
+      16    },
+      17  };
+      18  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/posts.store.ts)
+  ⎿  Added 1 line, removed 2 lines
+      1  import { create } from 'zustand';
+      2 -import { faker } from '@faker-js/faker';                        
+      3 -import { fetchPosts } from '../api/posts.api';                  
+      2 +import { fetchPosts, getPostImageUrl } from '../api/posts.api'; 
+      3  import { postsRepository } from '@repositories/posts.repository'
+         ;
+      4  import type { Post } from '@db/schema';
+      5  
+
+⏺ Update(src/stores/posts.store.ts)
+  ⎿  Added 1 line, removed 1 line
+      26        const apiPosts = await fetchPosts();
+      27        const toInsert = apiPosts.map(p => ({
+      28          ...p,
+      29 -        imageUrl: faker.image.urlPicsumPhotos({ width: 25, heig
+         -ht: 25 }),                                                     
+      29 +        imageUrl: getPostImageUrl(p.id, 25),                   
+      30        }));
+      31  
+      32        await postsRepository.insertMany(toInsert);
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/post-details.store.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { create } from 'zustand';
+      2 -import { fetchPostById } from '../api/posts.api';               
+      2 +import { fetchPostById, getPostImageUrl } from '../api/posts.api
+        +';                                                              
+      3  import { postDetailsRepository } from '@repositories/post-detail
+         s.repository';
+      4  import type { PostDetails } from '@db/schema';
+      5  
+
+⏺ Update(src/stores/post-details.store.ts)  ⎿  Added 1 line
+      42          userId: apiPost.userId,
+      43          title: apiPost.title,
+      44          body: apiPost.body,
+      45 +        imageUrl: getPostImageUrl(apiPost.id, 300),            
+      46          fetchedAt: Date.now(),
+      47        };
+      48  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 1 line, removed 1 line
+      53      <ScrollView
+      54        contentContainerStyle={styles.container}
+      55        contentInsetAdjustmentBehavior="automatic">
+      56 -      <CachedImage source={{ uri: listPost.imageUrl }} style={s
+         -tyles.image} />                                                
+      56 +      <CachedImage source={{ uri: details.imageUrl }} style={st
+         +yles.image} />                                                 
+      57        <Text style={styles.title}>{details.title}</Text>
+      58        <Text style={styles.body}>{details.body}</Text>
+      59      </ScrollView>
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      78      borderRadius: 16,
+      79    },
+      80    image: {
+      81 -    width: 25,                                                 
+      82 -    height: 25,                                                
+      81 +    width: 300,                                                
+      82 +    height: 300,                                               
+      83      marginBottom: 12,
+      84 +    alignSelf: 'center',                                       
+      85    },
+      86    title: {
+      87      fontSize: 18,
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ faker's urlPicsumPhotos in this version doesn't accept a seed option. Picsum
+  supports seeded URLs directly in the path, so I'll build it explicitly.
+
+⏺ Update(src/api/posts.api.ts)
+  ⎿  Added 1 line, removed 7 lines
+      1 -import { faker } from '@faker-js/faker';                        
+      2 -                                                                
+      1  export type ApiPost = {
+      2    id: number;
+      3    userId: number;
+     ...
+       6  };
+       7  
+       8  export function getPostImageUrl(postId: number, size: number): 
+          string {
+      11 -  return faker.image.urlPicsumPhotos({                         
+      12 -    seed: String(postId),                                      
+      13 -    width: size,                                               
+      14 -    height: size,                                              
+      15 -  });                                                          
+       9 +  return `https://picsum.photos/seed/${postId}/${size}/${size}`
+         +;                                                              
+      10  }
+      11  
+      12  export async function fetchPosts(): Promise<ApiPost[]> {
+
+  Searched for 2 patterns, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Switching to actually call faker (with faker.seed(postId)) to honor the "use
+  the same fakeJS call" intent — the URL shape is identical to my hand-built
+  version, just generated through faker.
+
+⏺ Update(src/api/posts.api.ts)
+  ⎿  Added 4 lines, removed 1 line
+      1 +import { faker } from '@faker-js/faker';                        
+      2 +                                                                
+      3  export type ApiPost = {
+      4    id: number;
+      5    userId: number;
+     ...
+       8  };
+       9  
+      10  export function getPostImageUrl(postId: number, size: number): 
+          string {
+       9 -  return `https://picsum.photos/seed/${postId}/${size}/${size}`
+         -;                                                              
+      11 +  faker.seed(postId);                                          
+      12 +  return faker.image.urlPicsumPhotos({ width: size, height: siz
+         +e });                                                          
+      13  }
+      14  
+      15  export async function fetchPosts(): Promise<ApiPost[]> {
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Done. Lint and type check both pass.
+
+  Changes:
+  - src/api/posts.api.ts — new getPostImageUrl(postId, size) that calls
+  faker.seed(postId) then faker.image.urlPicsumPhotos({ width: size, height: 
+  size }). Same faker call shared by both enrichment paths; deterministic per
+  postId so thumbnail and details land on the same picsum photo.
+  - src/db/schema.ts + 0004_busy_sunspot.sql — added image_url (NOT NULL) to
+  post_details; migration registered as m0004.
+  - src/stores/posts.store.ts — replaced inline faker.image.urlPicsumPhotos(...)
+   with getPostImageUrl(p.id, 25); dropped direct faker import.
+  - src/stores/post-details.store.ts — network branch enriches the row with
+  imageUrl: getPostImageUrl(apiPost.id, 300) before upsert.
+  - src/containers/Details.container.tsx — <CachedImage> now sources
+  details.imageUrl; styles.image bumped to 300×300 with alignSelf: 'center'.
+
+  Memory saved: feedback_faker_enrichment.md — faker is only called at the
+  API-enrichment boundary inside stores; never at render time. Helper for shared
+   derivation lives in src/api/posts.api.ts.
+
+  Manual checks (npm run ios):
+  - Wipe app data (the migration adds a NOT NULL column; existing rows in posts
+  from before this change still hold un-seeded URLs).
+  - List shows seeded 25×25 thumbnails. Tap → spinner → 300×300 picsum of the
+  same photo. Back, reopen → instant. Kill + relaunch + reopen → still instant
+  (from post_details + FastImage disk cache).
+
+  Note: faker.seed(postId) mutates faker's global RNG state. That's fine here
+  because the only other faker call in this codebase now goes through this same
+  helper. If you ever add other faker usage that needs unseeded randomness, do
+  it before calling getPostImageUrl in the same tick, or stash and restore the
+  state.
+
+✻ Brewed for 7m 53s
+
+❯ I see migration failed.                                                       
+
+⏺ What's the failure look like? My guess is the ALTER TABLE post_details ADD 
+  image_url text NOT NULL is hitting existing rows from when you opened a post
+  detail in the previous step — SQLite refuses a NOT NULL add when rows would
+  otherwise be unset.
+
+⏺ User answered Claude's questions:
+  ⎿  · How do you want to resolve the failed migration? → Make imageUrl nullable
+     · Can you paste the exact error from the Metro / device log? → Failed 
+     query: ALTER TABLE 'post_details' ADD 'image_url' text NOT NULL; params:
+
+⏺ Making imageUrl nullable on the schema, regenerating the migration cleanly,
+  and adding the null-guard in the container.
+
+⏺ Update(src/db/schema.ts)  ⎿  Added 1 line, removed 1 line
+      30    userId: integer('user_id').notNull(),
+      31    title: text('title').notNull(),
+      32    body: text('body').notNull(),
+      33 -  imageUrl: text('image_url').notNull(),                       
+      33 +  imageUrl: text('image_url'),                                 
+      34    fetchedAt: integer('fetched_at').notNull(),
+      35  });
+      36  
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(src/db/migrations/meta/_journal.json)
+  ⎿  Removed 7 lines
+      29        "when": 1780757438900,
+      30        "tag": "0003_tan_dreadnoughts",
+      31        "breakpoints": true
+      32 -    },                                                         
+      33 -    {                                                          
+      34 -      "idx": 4,                                                
+      35 -      "version": "6",                                          
+      36 -      "when": 1780766134404,                                   
+      37 -      "tag": "0004_busy_sunspot",                              
+      38 -      "breakpoints": true                                      
+      32      }
+      33    ]
+      34  }
+      35   No newline at end of file
+
+⏺ Update(src/db/migrations/migrations.ts)
+  ⎿  Removed 2 lines
+      3  import m0001 from './0001_next_strong_guy.sql';
+      4  import m0002 from './0002_violet_naoko.sql';
+      5  import m0003 from './0003_tan_dreadnoughts.sql';
+      6 -import m0004 from './0004_busy_sunspot.sql';                    
+      6  
+      7  const migrations = {
+      8    journal,
+     ...
+      11      m0001,
+      12      m0002,
+      13      m0003,
+      15 -    m0004,                                                     
+      14    },
+      15  };
+      16  
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Nullable ADD — runs cleanly on populated tables. Wiring it in and updating the
+   container guard.
+
+⏺ Update(src/db/migrations/migrations.ts)
+  ⎿  Added 2 lines
+      3  import m0001 from './0001_next_strong_guy.sql';
+      4  import m0002 from './0002_violet_naoko.sql';
+      5  import m0003 from './0003_tan_dreadnoughts.sql';
+      6 +import m0004 from './0004_polite_the_hood.sql';                 
+      7  
+      8  const migrations = {
+      9    journal,
+     ...
+      12      m0001,
+      13      m0002,
+      14      m0003,
+      15 +    m0004,                                                     
+      16    },
+      17  };
+      18  
+
+⏺ Update(src/containers/Details.container.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      53      <ScrollView
+      54        contentContainerStyle={styles.container}
+      55        contentInsetAdjustmentBehavior="automatic">
+      56 -      <CachedImage source={{ uri: details.imageUrl }} style={st
+         -yles.image} />                                                 
+      56 +      {details.imageUrl && (                                   
+      57 +        <CachedImage source={{ uri: details.imageUrl }} style={
+         +styles.image} />                                               
+      58 +      )}                                                       
+      59        <Text style={styles.title}>{details.title}</Text>
+      60        <Text style={styles.body}>{details.body}</Text>
+      61      </ScrollView>
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Both clean. Migration is now 0004_polite_the_hood.sql — a plain nullable ALTER
+   TABLE post_details ADD image_url text; that runs cleanly against existing
+  rows. Next app launch should apply it without error.
+
+  Changes:
+  - src/db/schema.ts — imageUrl on postDetails is now nullable (no .notNull()).
+  - Deleted the failed 0004_busy_sunspot.sql + its snapshot + journal entry;
+  regenerated as 0004_polite_the_hood.sql (ALTER TABLE post_details ADD 
+  image_url text;).
+  - migrations.ts — wired the new m0004.
+  - src/containers/Details.container.tsx — guards the <CachedImage> with
+  {details.imageUrl && ...} since the type is now string | null.
+
+  The store still writes a non-null URL for every freshly-fetched detail (via
+  getPostImageUrl), so in practice new rows will always have it. Any stale
+  legacy rows that have null will simply hide the image; reopening that post
+  won't fix it because the store short-circuits on a DB cache hit. If you want
+  the image for legacy details rows, the simplest path is to backfill on read
+  (when a cache hit returns imageUrl: null, refetch — or just
+  getPostImageUrl(id, 300) on the spot). Let me know if you want that backfill
+  behavior; otherwise the next time you nuke app data it self-heals.
+
+✻ Sautéed for 2m 11s
+
+※ recap: We're enriching post details with a 300×300 picsum image cached in `post_details` via faker, mirroring the list's thumbnail enrichment. Migration `0004_polite_the_hood.sql` is now nullable and clean; next action is relaunch the app to apply it and verify Details renders the cached image.
+
+❯ Add button to header using HeaderAction for cleaning sqlite db. Alert before  
+  is necessary                                                                  
+
+⏺ Different task — overwriting the plan. Let me check the existing nav setup and
+   what's exported from @react-navigation/elements.
+
+  Searched for 2 patterns, ran 1 shell command (ctrl+o to expand)
+
+⏺ Quick checks before I draft the plan:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Two notes for the plan, one I need to confirm:
+
+  - @react-navigation/elements v2.9.19 doesn't export a HeaderAction component;
+  it exports HeaderButton (the same one already used in Details.screen.tsx:32).
+  I'll use HeaderButton unless you meant something else.
+  - post_details has a FK to posts.id, so deletes must run in the order
+  post_details → favorites → posts.
+
+⏺ User answered Claude's questions:
+  ⎿  · After the user confirms 'Clear', what should happen? → Just clear, leave 
+     list empty
+     · Did you actually mean `HeaderButton`, or is there a different component I
+      should look up? → Use HeaderButton (Recommended)
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/i-would-like-to-encapsulated-treehouse.md · 
+     /plan to edit
+     Add a "Clear cache" header button on the Posts screen
+
+     Context
+
+     We want a header button on the Posts screen that wipes all locally-cached
+     data — the posts, post_details, and favorites tables — gated by a
+     confirmation Alert. This is primarily a dev/test convenience but is also a
+     reasonable user action. After confirmation we wipe the SQLite tables AND
+     reset each store's in-memory state, leaving the Posts list visually empty
+     until the user restarts the app (which triggers loadPosts / loadFavorites
+     in Posts.container.tsx's mount effect).
+
+     Note: the user mentioned HeaderAction, but
+     @react-navigation/elements@2.9.19 only exports HeaderButton (no
+     HeaderAction symbol). We'll use HeaderButton — the same component already
+     used for the favorite star in Details.screen.tsx.
+
+     Design
+
+     Repository — one new method per table
+
+     Add clear() to each repository — full-table delete via Drizzle's
+     db.delete(table).run():
+
+     - src/repositories/posts.repository.ts → postsRepository.clear
+     - src/repositories/post-details.repository.ts → postDetailsRepository.clear
+     - src/repositories/favorites.repository.ts → favoritesRepository.clear
+
+     Stores — clear() action per store
+
+     Per [[feedback_state_architecture]] (components never call DB directly):
+     each store gets a clear async action that calls its repo and resets
+     in-memory state.
+
+     - usePostsStore.clear() → await postsRepository.clear(), then set({ posts: 
+     [], isLoading: false, error: null }).
+     - usePostDetailsStore.clear() → await postDetailsRepository.clear(), then
+     set({ detailsById: {}, loadingIds: new Set(), errorById: {} }).
+     - useFavoritesStore.clear() → await favoritesRepository.clear(), then set({
+      favoriteIds: new Set() }).
+
+     Screen — header button + confirmation
+
+     In src/navigation/Posts.screen.tsx:
+
+     - useLayoutEffect(...) registers a headerRight rendering <HeaderButton 
+     accessibilityLabel="Clear cache" 
+     onPress={handleClearPress}>Clear</HeaderButton>. (Mirrors the pattern in
+     Details.screen.tsx.)
+     - handleClearPress calls Alert.alert (React Native built-in) with:
+       - title: "Clear cached data?"
+       - message: "This removes all posts, details, and favorites stored
+     locally."
+       - buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 
+     'destructive', onPress: handleConfirm }].
+     - handleConfirm calls the three store clear() actions sequentially, in 
+     FK-safe order:
+       a. usePostDetailsStore.getState().clear() — must precede posts clear
+     because post_details.post_id is a FK to posts.id.
+       b. useFavoritesStore.getState().clear() — independent of FK ordering.
+       c. usePostsStore.getState().clear().
+
+     Per the chosen UX: after the wipe, the list and favorites visually go empty
+      and stay empty. The user restarts the app to trigger the next
+     loadPosts/loadFavorites mount effect in the container.
+
+     The button does not need to be rendered inside the container — header
+     customization is a screen-level concern (per [[feedback_file_naming]] split
+      between *.screen.tsx and *.container.tsx).
+
+     Files to change
+
+     - src/repositories/posts.repository.ts — add clear.
+     - src/repositories/post-details.repository.ts — add clear.
+     - src/repositories/favorites.repository.ts — add clear.
+     - src/stores/posts.store.ts — add clear action; extend PostsState type.
+     - src/stores/post-details.store.ts — add clear action; extend state type.
+     - src/stores/favorites.store.ts — add clear action; extend state type.
+     - src/navigation/Posts.screen.tsx — import HeaderButton, Alert,
+     useLayoutEffect; add the orchestrator + header registration.
+
+     No schema, migration, or container changes.
+
+     Verification
+
+     1. npm run lint and npx tsc --noEmit — both clean.
+     2. npm run ios:
+       - Posts screen header shows a "Clear" button at top right.
+       - Tap → Alert appears with Cancel / Clear (destructive).
+       - Cancel → no state change.
+       - Clear → list immediately shows empty Favorites and Other sections;
+     previously favorited posts are no longer marked.
+       - Open a post that was previously cached for details (without restarting)
+      → spinner + network call (proves post_details was wiped).
+       - Restart the app → loadPosts / loadFavorites mount effects in the
+     container refetch, list repopulates.
+     3. Confirm in SQLite (optional) that all three tables are empty between
+     Clear and restart.
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/repositories/posts.repository.ts)
+  ⎿  Added 1 line
+      18      .from(posts)
+      19      .limit(1)
+      20      .get()),
+      21 +  clear: () => db.delete(posts).run(),                         
+      22  };
+
+⏺ Update(src/repositories/post-details.repository.ts)
+  ⎿  Added 1 line
+      12      .values(row)
+      13      .onConflictDoUpdate({ target: postDetails.postId, set: row 
+          })
+      14      .run(),
+      15 +  clear: () => db.delete(postDetails).run(),                   
+      16  };
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/repositories/favorites.repository.ts)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/repositories/favorites.repository.ts)
+  ⎿  Added 1 line
+      25        .delete(favorites)
+      26        .where(eq(favorites.postId, postId))
+      27        .run(),
+      28 +  clear: () => db.delete(favorites).run(),                     
+      29  };
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/posts.store.ts)
+  ⎿  Added 1 line
+       8    isLoading: boolean;
+       9    error: string | null;
+      10    loadPosts: () => Promise<void>;
+      11 +  clear: () => Promise<void>;                                  
+      12  };
+      13  
+      14  export const usePostsStore = create<PostsState>(set => ({
+
+⏺ Update(src/stores/posts.store.ts)
+  ⎿  Added 4 lines
+      36        set({ error: (err as Error).message, isLoading: false });
+      37      }
+      38    },
+      39 +  clear: async () => {                                         
+      40 +    await postsRepository.clear();                             
+      41 +    set({ posts: [], isLoading: false, error: null });         
+      42 +  },                                                           
+      43  }));
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/favorites.store.ts)
+  ⎿  Added 1 line
+       7    favoriteIds: Set<number>;
+       8    loadFavorites: () => Promise<void>;
+       9    toggleFavorite: (postId: number) => Promise<void>;
+      10 +  clear: () => Promise<void>;                                  
+      11  };
+      12  
+      13  export const useFavoritesStore = create<FavoritesState>((set, g
+          et) => ({
+
+⏺ Update(src/stores/favorites.store.ts)
+  ⎿  Added 4 lines
+      33        await favoritesRepository.add(postId, Date.now());
+      34      }
+      35    },
+      36 +  clear: async () => {                                         
+      37 +    await favoritesRepository.clear();                         
+      38 +    set({ favoriteIds: new Set<number>() });                   
+      39 +  },                                                           
+      40  }));
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/post-details.store.ts)
+  ⎿  Added 1 line
+       8    loadingIds: Set<number>;
+       9    errorById: Record<number, string>;
+      10    loadPostDetails: (id: number) => Promise<void>;
+      11 +  clear: () => Promise<void>;                                  
+      12  };
+      13  
+      14  export const usePostDetailsStore = create<PostDetailsState>((se
+          t, get) => ({
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/stores/post-details.store.ts)
+  ⎿  Added 4 lines
+      69        });
+      70      }
+      71    },
+      72 +  clear: async () => {                                         
+      73 +    await postDetailsRepository.clear();                       
+      74 +    set({ detailsById: {}, loadingIds: new Set<number>(), error
+         +ById: {} });                                                   
+      75 +  },                                                           
+      76  }));
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(src/navigation/Posts.screen.tsx)
+  ⎿  Added 45 lines, removed 1 line
+       1 -import { useCallback } from 'react';                           
+       1 +import { useCallback, useLayoutEffect } from 'react';          
+       2 +import { Alert, StyleSheet, Text } from 'react-native';        
+       3 +import { HeaderButton } from '@react-navigation/elements';     
+       4  import { PostsContainer } from '@containers/Posts.container';
+       5 +import { usePostsStore } from '@stores/posts.store';           
+       6 +import { usePostDetailsStore } from '@stores/post-details.store
+         +';                                                             
+       7 +import { useFavoritesStore } from '@stores/favorites.store';   
+       8  
+       9  import { PostsScreenProps } from './types';
+      10  
+      11 +async function clearAllCaches() {                              
+      12 +  // post_details first — its post_id FK references posts(id). 
+      13 +  await usePostDetailsStore.getState().clear();                
+      14 +  await useFavoritesStore.getState().clear();                  
+      15 +  await usePostsStore.getState().clear();                      
+      16 +}                                                              
+      17 +                                                               
+      18 +function promptClearCache() {                                  
+      19 +  Alert.alert(                                                 
+      20 +    'Clear cached data?',                                      
+      21 +    'This removes all posts, details, and favorites stored loca
+         +lly.',                                                         
+      22 +    [                                                          
+      23 +      { text: 'Cancel', style: 'cancel' },                     
+      24 +      { text: 'Clear', style: 'destructive', onPress: clearAllC
+         +aches },                                                       
+      25 +    ],                                                         
+      26 +  );                                                           
+      27 +}                                                              
+      28 +                                                               
+      29 +function ClearHeaderButton() {                                 
+      30 +  return (                                                     
+      31 +    <HeaderButton accessibilityLabel="Clear cache" onPress={pro
+         +mptClearCache}>                                                
+      32 +      <Text style={styles.label}>Clear</Text>                  
+      33 +    </HeaderButton>                                            
+      34 +  );                                                           
+      35 +}                                                              
+      36 +                                                               
+      37 +const renderClearHeaderRight = () => <ClearHeaderButton />;    
+      38 +                                                               
+      39  export default function PostsScreen({ navigation }: PostsScreen
+          Props) {
+      40    const handlePostPress = useCallback(
+      41      (id: number) => navigation.navigate('Details', { postId: id
+           }),
+      42      [navigation],
+      43    );
+      44  
+      45 +  useLayoutEffect(() => {                                      
+      46 +    navigation.setOptions({ headerRight: renderClearHeaderRight
+         + });                                                           
+      47 +  }, [navigation]);                                            
+      48 +                                                               
+      49    return <PostsContainer onPostPress={handlePostPress} />;
+      50  }
+      51 +                                                               
+      52 +const styles = StyleSheet.create({                             
+      53 +  label: {                                                     
+      54 +    fontSize: 16,                                              
+      55 +    color: '#ff3b30',                                          
+      56 +  },                                                           
+      57 +});                                                            
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Done. Lint and type check both pass.
+
+  Changes:
+  - Repos got a clear() method each: postsRepository, postDetailsRepository,
+  favoritesRepository (Drizzle db.delete(table).run()).
+  - Stores got matching clear() actions that call the repo and reset in-memory
+  state: usePostsStore, usePostDetailsStore, useFavoritesStore.
+  - src/navigation/Posts.screen.tsx now registers a headerRight via
+  useLayoutEffect rendering a HeaderButton labeled "Clear" (red text). Tapping
+  it opens Alert.alert with Cancel / Clear (destructive). The Clear action runs
+  clearAllCaches() — post_details → favorites → posts in FK-safe order — and the
+   list/sections immediately go empty since each store also resets its in-memory
+   state.
+
+  Manual checks (npm run ios):
+  - Posts header shows a red "Clear" button.
+  - Tap → Alert; Cancel leaves state untouched.
+  - Tap → Clear → list and favorites visibly empty.
+  - Open a previously-cached detail without restarting → spinner + network call
+  confirms post_details was wiped.
+  - Restart the app → loadPosts / loadFavorites in the Posts container mount
+  effect refetch and repopulate.
+
+  If you want the list to auto-refetch immediately after Clear (instead of
+  waiting for an app restart), say the word and I'll add a loadPosts() +
+  loadFavorites() call at the end of clearAllCaches().
+
+✻ Worked for 4m 36s
+
+※ recap: Building out the React Native posts app — just added a "Clear" header button on Posts that wipes all SQLite caches behind an Alert confirmation, with lint and tsc passing. Next: run it on iOS and verify the wipe + restart-repopulate flow works end to end.

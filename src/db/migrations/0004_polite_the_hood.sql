@@ -1,0 +1,1 @@
+ALTER TABLE `post_details` ADD `image_url` text;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { favoritesRepository } from '../repositories/favorites.repository';
+import { favoritesRepository } from '@repositories/favorites.repository';
 
 type FavoritesState = {
   // Ordered most-recently-favorited first; Set preserves insertion order
@@ -7,6 +7,7 @@ type FavoritesState = {
   favoriteIds: Set<number>;
   loadFavorites: () => Promise<void>;
   toggleFavorite: (postId: number) => Promise<void>;
+  clear: () => Promise<void>;
 };
 
 export const useFavoritesStore = create<FavoritesState>((set, get) => ({
@@ -17,8 +18,10 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
   },
   toggleFavorite: async (postId: number) => {
     const current = get().favoriteIds;
+
     if (current.has(postId)) {
       const next = new Set(current);
+
       next.delete(postId);
       set({ favoriteIds: next });
       await favoritesRepository.remove(postId);
@@ -29,5 +32,9 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       set({ favoriteIds: next });
       await favoritesRepository.add(postId, Date.now());
     }
+  },
+  clear: async () => {
+    await favoritesRepository.clear();
+    set({ favoriteIds: new Set<number>() });
   },
 }));

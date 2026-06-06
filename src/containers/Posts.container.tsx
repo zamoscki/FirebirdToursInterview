@@ -1,21 +1,20 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { CachedImage } from '../components/CachedImage';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { GestureDetector, useTapGesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-worklets';
-import { usePostsStore } from '../stores/posts.store';
-import { useFavoritesStore } from '../stores/favorites.store';
-import { PostsScreenProps } from '../navigation/types';
-import type { Post } from '../db/schema';
+import { usePostsStore } from '@stores/posts.store';
+import { useFavoritesStore } from '@stores/favorites.store';
+import type { Post } from '@db/schema';
 
 type PostRowProps = {
   item: Post;
@@ -58,6 +57,8 @@ function PostRowComponent({
     },
   });
 
+  // console.log(`render item: ${item.id}`);
+
   return (
     <ReanimatedSwipeable
       ref={swipeableRef}
@@ -69,7 +70,7 @@ function PostRowComponent({
       }}>
       <GestureDetector gesture={tapGesture}>
         <View style={styles.row}>
-          <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} />
+          <CachedImage source={{ uri: item.imageUrl }} style={styles.thumbnail} />
           <Text style={styles.title}>{item.title}</Text>
           {isFavorite && <Text style={styles.favoriteBadge}>★</Text>}
         </View>
@@ -80,14 +81,20 @@ function PostRowComponent({
 
 const PostRow = memo(PostRowComponent);
 
-export default function PostsScreen({ navigation }: PostsScreenProps) {
+type PostsContainerProps = {
+  onPostPress: (id: number) => void;
+};
+
+export function PostsContainer({ onPostPress }: PostsContainerProps) {
   const posts = usePostsStore(s => s.posts);
   const isLoading = usePostsStore(s => s.isLoading);
   const error = usePostsStore(s => s.error);
-  const loadPosts = usePostsStore(s => s.loadPosts);
   const favoriteIds = useFavoritesStore(s => s.favoriteIds);
+
+  const loadPosts = usePostsStore(s => s.loadPosts);
   const loadFavorites = useFavoritesStore(s => s.loadFavorites);
   const toggleFavorite = useFavoritesStore(s => s.toggleFavorite);
+
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
 
   const sections = useMemo(() => {
@@ -118,11 +125,6 @@ export default function PostsScreen({ navigation }: PostsScreenProps) {
     openSwipeableRef.current = null;
   }, []);
 
-  const handlePostPress = useCallback(
-    (id: number) => navigation.navigate('Details', { postId: id }),
-    [navigation],
-  );
-
   useEffect(() => {
     loadPosts();
     loadFavorites();
@@ -132,12 +134,12 @@ export default function PostsScreen({ navigation }: PostsScreenProps) {
     ({ item }: { item: Post }) => (
       <PostRow
         item={item}
-        onPress={handlePostPress}
+        onPress={onPostPress}
         onToggleFavorite={toggleFavorite}
         onSwipeOpen={handleSwipeOpen}
       />
     ),
-    [handlePostPress, toggleFavorite, handleSwipeOpen],
+    [onPostPress, toggleFavorite, handleSwipeOpen],
   );
 
   if (isLoading) {
