@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect } from 'react';
 import { Alert, StyleSheet, Text } from 'react-native';
 import { HeaderButton } from '@react-navigation/elements';
-import { PostsContainer } from '@containers/Posts.container';
+import { PostsContainer } from '@containers/Posts/Posts.container';
 import { usePostsStore } from '@stores/posts.store';
 import { usePostDetailsStore } from '@stores/post-details.store';
 import { useFavoritesStore } from '@stores/favorites.store';

@@ -56,8 +56,10 @@ export function DetailsContainer({ postId }: DetailsContainerProps) {
       {details.imageUrl && (
         <CachedImage source={{ uri: details.imageUrl }} style={styles.image} />
       )}
-      <Text style={styles.title}>{details.title}</Text>
-      <Text style={styles.body}>{details.body}</Text>
+      <View style={styles.description}>
+        <Text style={styles.title}>{details.title}</Text>
+        <Text style={styles.body}>{details.body}</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -74,13 +76,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
   },
   container: {
-    padding: 16,
     margin: 16,
     backgroundColor: 'white',
     borderRadius: 16,
+    overflow: 'hidden',
+  },
+  description: {
+    padding: 16,
   },
   image: {
-    width: 300,
+    width: '100%',
     height: 300,
     marginBottom: 12,
     alignSelf: 'center',

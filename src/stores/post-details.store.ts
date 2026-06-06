@@ -5,16 +5,23 @@ import type { PostDetails } from '@db/schema';
 
 type PostDetailsState = {
   detailsById: Record<number, PostDetails>;
+  cachedIds: Set<number>;
   loadingIds: Set<number>;
   errorById: Record<number, string>;
+  loadCachedIds: () => Promise<void>;
   loadPostDetails: (id: number) => Promise<void>;
   clear: () => Promise<void>;
 };
 
 export const usePostDetailsStore = create<PostDetailsState>((set, get) => ({
   detailsById: {},
+  cachedIds: new Set<number>(),
   loadingIds: new Set<number>(),
   errorById: {},
+  loadCachedIds: async () => {
+    const rows = await postDetailsRepository.getAllIds();
+    set({ cachedIds: new Set<number>(rows.map(r => r.postId)) });
+  },
   loadPostDetails: async (id: number) => {
     if (get().detailsById[id]) {
       return;
@@ -29,32 +36,37 @@ export const usePostDetailsStore = create<PostDetailsState>((set, get) => ({
 
     set(state => {
       const next = new Set(state.loadingIds);
-      next.add(id);
       const nextErrors = { ...state.errorById };
+
+      // clear state values for current id (delete error and update set as loading);
+      next.add(id);
       delete nextErrors[id];
       return { loadingIds: next, errorById: nextErrors };
     });
 
     try {
-      const apiPost = await fetchPostById(id);
+      const response = await fetchPostById(id);
 
-      const row: PostDetails = {
-        postId: apiPost.id,
-        userId: apiPost.userId,
-        title: apiPost.title,
-        body: apiPost.body,
-        imageUrl: getPostImageUrl(apiPost.id, 300),
+      const details: PostDetails = {
+        postId: response.id,
+        userId: response.userId,
+        title: response.title,
+        body: response.body,
+        imageUrl: getPostImageUrl(response.id, 300),
         fetchedAt: Date.now(),
       };
 
-      await postDetailsRepository.upsert(row);
+      await postDetailsRepository.upsert(details);
 
       set(state => {
         const nextLoading = new Set(state.loadingIds);
         nextLoading.delete(id);
+        const nextCached = new Set(state.cachedIds);
+        nextCached.add(id);
         return {
-          detailsById: { ...state.detailsById, [id]: row },
+          detailsById: { ...state.detailsById, [id]: details },
           loadingIds: nextLoading,
+          cachedIds: nextCached,
         };
       });
 
@@ -71,6 +83,11 @@ export const usePostDetailsStore = create<PostDetailsState>((set, get) => ({
   },
   clear: async () => {
     await postDetailsRepository.clear();
-    set({ detailsById: {}, loadingIds: new Set<number>(), errorById: {} });
+    set({
+      detailsById: {},
+      cachedIds: new Set<number>(),
+      loadingIds: new Set<number>(),
+      errorById: {},
+    });
   },
 }));

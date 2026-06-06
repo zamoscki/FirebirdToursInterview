@@ -1,85 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { CachedImage } from '../components/CachedImage';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { GestureDetector, useTapGesture } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-worklets';
 import { usePostsStore } from '@stores/posts.store';
 import { useFavoritesStore } from '@stores/favorites.store';
+import { usePostDetailsStore } from '@stores/post-details.store';
 import type { Post } from '@db/schema';
 
-type PostRowProps = {
-  item: Post;
-  onPress: (id: number) => void;
-  onToggleFavorite: (id: number) => void;
-  onSwipeOpen: (methods: SwipeableMethods) => void;
-};
-
-function PostRowComponent({
-  item,
-  onPress,
-  onToggleFavorite,
-  onSwipeOpen,
-}: PostRowProps) {
-  const isFavorite = useFavoritesStore(s => s.favoriteIds.has(item.id));
-  const swipeableRef = useRef<SwipeableMethods>(null);
-
-  const handlePress = () => onPress(item.id);
-  const handleToggle = () => onToggleFavorite(item.id);
-
-  const renderRightActions = (
-    _progress: unknown,
-    _translation: unknown,
-    swipeableMethods: SwipeableMethods,
-  ) => (
-    <Pressable
-      style={styles.favoriteAction}
-      onPress={() => {
-        handleToggle();
-        swipeableMethods.close();
-      }}>
-      <Text style={styles.favoriteActionText}>{isFavorite ? '★' : '☆'}</Text>
-    </Pressable>
-  );
-
-  const tapGesture = useTapGesture({
-    onActivate: () => {
-      'worklet';
-      runOnJS(handlePress)();
-    },
-  });
-
-  // console.log(`render item: ${item.id}`);
-
-  return (
-    <ReanimatedSwipeable
-      ref={swipeableRef}
-      renderRightActions={renderRightActions}
-      onSwipeableWillOpen={() => {
-        if (swipeableRef.current) {
-          onSwipeOpen(swipeableRef.current);
-        }
-      }}>
-      <GestureDetector gesture={tapGesture}>
-        <View style={styles.row}>
-          <CachedImage source={{ uri: item.imageUrl }} style={styles.thumbnail} />
-          <Text style={styles.title}>{item.title}</Text>
-          {isFavorite && <Text style={styles.favoriteBadge}>★</Text>}
-        </View>
-      </GestureDetector>
-    </ReanimatedSwipeable>
-  );
-}
-
-const PostRow = memo(PostRowComponent);
+import { PostRow } from './components/PostRow';
 
 type PostsContainerProps = {
   onPostPress: (id: number) => void;
@@ -93,6 +26,7 @@ export function PostsContainer({ onPostPress }: PostsContainerProps) {
 
   const loadPosts = usePostsStore(s => s.loadPosts);
   const loadFavorites = useFavoritesStore(s => s.loadFavorites);
+  const loadCachedIds = usePostDetailsStore(s => s.loadCachedIds);
   const toggleFavorite = useFavoritesStore(s => s.toggleFavorite);
 
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
@@ -126,9 +60,11 @@ export function PostsContainer({ onPostPress }: PostsContainerProps) {
   }, []);
 
   useEffect(() => {
+    console.log('EFFECT');
     loadPosts();
     loadFavorites();
-  }, [loadPosts, loadFavorites]);
+    loadCachedIds();
+  }, [loadPosts, loadFavorites, loadCachedIds]);
 
   const renderItem = useCallback(
     ({ item }: { item: Post }) => (
@@ -209,36 +145,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#8e8e93',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
-  },
-  thumbnail: {
-    width: 25,
-    height: 25,
-  },
-  title: {
-    flex: 1,
-    fontSize: 16,
-  },
-  favoriteBadge: {
-    fontSize: 18,
-    color: '#f5a623',
-  },
-  favoriteAction: {
-    backgroundColor: '#f5a623',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 72,
-  },
-  favoriteActionText: {
-    fontSize: 28,
-    color: '#fff',
   },
 });

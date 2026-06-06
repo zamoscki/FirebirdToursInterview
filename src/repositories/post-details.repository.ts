@@ -8,9 +8,12 @@ export const postDetailsRepository = {
     .from(postDetails)
     .where(eq(postDetails.postId, postId))
     .get(),
-  upsert: (row: NewPostDetails) => db.insert(postDetails)
-    .values(row)
-    .onConflictDoUpdate({ target: postDetails.postId, set: row })
+  getAllIds: () => db.select({ postId: postDetails.postId })
+    .from(postDetails)
+    .all(),
+  upsert: (details: NewPostDetails) => db.insert(postDetails)
+    .values(details)
+    .onConflictDoUpdate({ target: postDetails.postId, set: details })
     .run(),
   clear: () => db.delete(postDetails).run(),
 };

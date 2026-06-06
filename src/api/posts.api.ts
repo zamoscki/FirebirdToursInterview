@@ -9,7 +9,7 @@ export type ApiPost = {
 
 export function getPostImageUrl(postId: number, size: number): string {
   faker.seed(postId);
-  return faker.image.urlPicsumPhotos({ width: size, height: size });
+  return faker.image.urlPicsumPhotos({ width: size, height: size, blur: 0, grayscale: false });
 }
 
 export async function fetchPosts(): Promise<ApiPost[]> {
