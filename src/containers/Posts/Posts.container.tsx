@@ -60,7 +60,6 @@ export function PostsContainer({ onPostPress }: PostsContainerProps) {
   }, []);
 
   useEffect(() => {
-    console.log('EFFECT');
     loadPosts();
     loadFavorites();
     loadCachedIds();

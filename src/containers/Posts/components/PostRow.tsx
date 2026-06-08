@@ -6,7 +6,7 @@ import { GestureDetector, useTapGesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-worklets';
 import { useFavoritesStore } from '@stores/favorites.store';
 import { usePostDetailsStore } from '@stores/post-details.store';
-import { CachedImage } from '../../../components/CachedImage';
+import { CachedImage } from '@components/CachedImage';
 import type { Post } from '@db/schema';
 
 type PostRowProps = {
