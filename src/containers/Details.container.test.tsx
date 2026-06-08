@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 
 import { usePostsStore } from '@stores/posts.store';
 import { usePostDetailsStore } from '@stores/post-details.store';
@@ -56,8 +56,8 @@ describe('DetailsContainer', () => {
 
   it('shows "Post not found." when the list does not contain the id', async () => {
     setupStores({ posts: [] });
-    const { getByText } = await render(<DetailsContainer postId={42} />);
-    expect(getByText('Post not found.')).toBeTruthy();
+    await render(<DetailsContainer postId={42} />);
+    expect(screen.getByText('Post not found.')).toBeTruthy();
   });
 
   it('renders the error message when errorById[postId] is set', async () => {
@@ -65,8 +65,8 @@ describe('DetailsContainer', () => {
       posts: [POST],
       errorById: { 1: 'fetch failed' },
     });
-    const { getByText } = await render(<DetailsContainer postId={1} />);
-    expect(getByText('fetch failed')).toBeTruthy();
+    await render(<DetailsContainer postId={1} />);
+    expect(screen.getByText('fetch failed')).toBeTruthy();
   });
 
   it('shows a loading indicator when details are loading (no body, no error)', async () => {
@@ -74,18 +74,18 @@ describe('DetailsContainer', () => {
       posts: [POST],
       loadingIds: new Set<number>([1]),
     });
-    const { queryByText } = await render(<DetailsContainer postId={1} />);
+    await render(<DetailsContainer postId={1} />);
     // Loading branch renders only ActivityIndicator — no list/error text.
-    expect(queryByText('list title')).toBeNull();
-    expect(queryByText('details title')).toBeNull();
-    expect(queryByText('Post not found.')).toBeNull();
+    expect(screen.queryByText('list title')).toBeNull();
+    expect(screen.queryByText('details title')).toBeNull();
+    expect(screen.queryByText('Post not found.')).toBeNull();
   });
 
   it('renders title and body from details when data is available', async () => {
     setupStores({ posts: [POST], detailsById: { 1: DETAILS } });
-    const { getByText } = await render(<DetailsContainer postId={1} />);
-    expect(getByText('details title')).toBeTruthy();
-    expect(getByText('details body')).toBeTruthy();
+    await render(<DetailsContainer postId={1} />);
+    expect(screen.getByText('details title')).toBeTruthy();
+    expect(screen.getByText('details body')).toBeTruthy();
   });
 
   it('calls loadPostDetails(postId) on mount', async () => {

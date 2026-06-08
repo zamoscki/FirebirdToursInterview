@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import { useFavoritesStore } from '@stores/favorites.store';
 import { usePostDetailsStore } from '@stores/post-details.store';
@@ -70,7 +70,7 @@ describe('PostRow', () => {
 
   it('renders the post id and title', async () => {
     setupStores();
-    const { getByText } = await render(
+    await render(
       <PostRow
         item={ITEM}
         onPress={jest.fn()}
@@ -78,13 +78,13 @@ describe('PostRow', () => {
         onSwipeOpen={jest.fn()}
       />,
     );
-    expect(getByText('1')).toBeTruthy();
-    expect(getByText('hello world')).toBeTruthy();
+    expect(screen.getByText('1')).toBeTruthy();
+    expect(screen.getByText('hello world')).toBeTruthy();
   });
 
   it('shows the "Cached" badge only when the post is cached', async () => {
     setupStores({ isCached: true });
-    const { getByText, rerender, queryByText } = await render(
+    const { rerender } = await render(
       <PostRow
         item={ITEM}
         onPress={jest.fn()}
@@ -92,7 +92,7 @@ describe('PostRow', () => {
         onSwipeOpen={jest.fn()}
       />,
     );
-    expect(getByText('Cached')).toBeTruthy();
+    expect(screen.getByText('Cached')).toBeTruthy();
 
     setupStores({ isCached: false });
     await rerender(
@@ -103,12 +103,12 @@ describe('PostRow', () => {
         onSwipeOpen={jest.fn()}
       />,
     );
-    expect(queryByText('Cached')).toBeNull();
+    expect(screen.queryByText('Cached')).toBeNull();
   });
 
   it('shows the favorite "★" badge only when the post is favorited', async () => {
     setupStores({ isFavorite: true });
-    const { getAllByText, rerender, queryAllByText } = await render(
+    const { rerender } = await render(
       <PostRow
         item={ITEM}
         onPress={jest.fn()}
@@ -117,7 +117,7 @@ describe('PostRow', () => {
       />,
     );
     // Two stars expected when favorited: row badge + swipe action label.
-    expect(getAllByText('★').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('★').length).toBeGreaterThanOrEqual(1);
 
     setupStores({ isFavorite: false });
     await rerender(
@@ -129,12 +129,12 @@ describe('PostRow', () => {
       />,
     );
     // Row badge gone; only the empty ☆ remains in the swipe action.
-    expect(queryAllByText('★')).toEqual([]);
+    expect(screen.queryAllByText('★')).toEqual([]);
   });
 
   it('uses an empty ☆ in the swipe action when not favorited', async () => {
     setupStores({ isFavorite: false });
-    const { getByText } = await render(
+    await render(
       <PostRow
         item={ITEM}
         onPress={jest.fn()}
@@ -142,13 +142,13 @@ describe('PostRow', () => {
         onSwipeOpen={jest.fn()}
       />,
     );
-    expect(getByText('☆')).toBeTruthy();
+    expect(screen.getByText('☆')).toBeTruthy();
   });
 
   it('calls onToggleFavorite and closes the swipeable when the swipe action is pressed', async () => {
     setupStores({ isFavorite: false });
     const onToggleFavorite = jest.fn();
-    const { getByText } = await render(
+    await render(
       <PostRow
         item={ITEM}
         onPress={jest.fn()}
@@ -157,7 +157,7 @@ describe('PostRow', () => {
       />,
     );
 
-    fireEvent.press(getByText('☆'));
+    fireEvent.press(screen.getByText('☆'));
 
     expect(onToggleFavorite).toHaveBeenCalledWith(1);
     const swipeable = require('react-native-gesture-handler/ReanimatedSwipeable')

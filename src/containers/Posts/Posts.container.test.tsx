@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 
 import { usePostsStore } from '@stores/posts.store';
 import { useFavoritesStore } from '@stores/favorites.store';
@@ -78,22 +78,18 @@ describe('PostsContainer', () => {
 
   it('shows a loading indicator when isLoading is true (no list, no error)', async () => {
     setupStores({ isLoading: true, posts: MOCK_POSTS });
-    const { queryByText, queryByTestId } = await render(
-      <PostsContainer onPostPress={jest.fn()} />,
-    );
+    await render(<PostsContainer onPostPress={jest.fn()} />);
     // Loading branch renders only ActivityIndicator — none of the list/header
     // content or error text should be present.
-    expect(queryByText('Favorites')).toBeNull();
-    expect(queryByText('Other')).toBeNull();
-    expect(queryByTestId('row-1')).toBeNull();
+    expect(screen.queryByText('Favorites')).toBeNull();
+    expect(screen.queryByText('Other')).toBeNull();
+    expect(screen.queryByTestId('row-1')).toBeNull();
   });
 
   it('shows error text when error is set', async () => {
     setupStores({ error: 'something failed' });
-    const { getByText } = await render(
-      <PostsContainer onPostPress={jest.fn()} />,
-    );
-    expect(getByText('something failed')).toBeTruthy();
+    await render(<PostsContainer onPostPress={jest.fn()} />);
+    expect(screen.getByText('something failed')).toBeTruthy();
   });
 
   it('renders favorites in Set insertion order, others in original order, with both headers', async () => {
@@ -103,25 +99,22 @@ describe('PostsContainer', () => {
       favoriteIds: new Set<number>([3, 1]),
     });
 
-    const { getByText, getByTestId } = await render(
-      <PostsContainer onPostPress={jest.fn()} />,
-    );
+    await render(<PostsContainer onPostPress={jest.fn()} />);
 
-    expect(getByText('Favorites')).toBeTruthy();
-    expect(getByText('Other')).toBeTruthy();
-    expect(getByTestId('row-1')).toBeTruthy();
-    expect(getByTestId('row-2')).toBeTruthy(); expect(getByTestId('row-3')).toBeTruthy();
+    expect(screen.getByText('Favorites')).toBeTruthy();
+    expect(screen.getByText('Other')).toBeTruthy();
+    expect(screen.getByTestId('row-1')).toBeTruthy();
+    expect(screen.getByTestId('row-2')).toBeTruthy();
+    expect(screen.getByTestId('row-3')).toBeTruthy();
   });
 
   it('hides the Favorites header when no posts are favorited', async () => {
     setupStores({ posts: MOCK_POSTS, favoriteIds: new Set<number>() });
 
-    const { queryByText, getByText } = await render(
-      <PostsContainer onPostPress={jest.fn()} />,
-    );
+    await render(<PostsContainer onPostPress={jest.fn()} />);
 
-    expect(queryByText('Favorites')).toBeNull();
-    expect(getByText('Other')).toBeTruthy();
+    expect(screen.queryByText('Favorites')).toBeNull();
+    expect(screen.getByText('Other')).toBeTruthy();
   });
 
   it('invokes loadPosts, loadFavorites, and loadCachedIds on mount', async () => {
